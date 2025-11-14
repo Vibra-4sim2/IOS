@@ -10,18 +10,18 @@ import SwiftUI
 struct ProfileView: View {
     // MARK: - ViewModel
     @StateObject private var viewModel = ProfileViewModel()
-    
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            
+
             if viewModel.isLoading {
                 ProgressView()
                     .progressViewStyle(CircularProgressViewStyle(tint: .green))
             } else if let user = viewModel.user {
                 ScrollView {
                     VStack(spacing: 25) {
-                        
+
                         // MARK: - Profile Header
                         VStack(spacing: 12) {
                             if let avatar = user.avatar, !avatar.isEmpty {
@@ -47,39 +47,39 @@ struct ProfileView: View {
                                         Circle().stroke(Color.gray.opacity(0.5), lineWidth: 2)
                                     )
                             }
-                            
+
                             Text("\(user.firstName) \(user.lastName)")
                                 .font(.title2)
                                 .fontWeight(.semibold)
                                 .foregroundColor(.white)
-                            
+
                             Text(user.email)
                                 .foregroundColor(.gray)
                                 .font(.subheadline)
-                            
+
                             NavigationLink(destination: ProfileUpdateView()) {
-                                    HStack {
-                                        Image(systemName: "square.and.pencil")
-                                        Text("Edit Profile")
-                                    }
-                                    .font(.system(size: 14, weight: .medium))
-                                    .padding(.horizontal, 20)
-                                    .padding(.vertical, 8)
-                                    .background(Color.green)
-                                    .foregroundColor(.black)
-                                    .cornerRadius(8)
+                                HStack {
+                                    Image(systemName: "square.and.pencil")
+                                    Text("Edit Profile")
                                 }
+                                .font(.system(size: 14, weight: .medium))
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 8)
+                                .background(Color.green)
+                                .foregroundColor(.black)
+                                .cornerRadius(8)
+                            }
                             .padding(.top, 8)
                         }
                         .padding(.top, 40)
-                        
+
                         // MARK: - Statistics Card (Statique pour l'instant)
                         VStack(alignment: .leading, spacing: 16) {
                             Text("Your Statistics")
                                 .font(.headline)
                                 .foregroundColor(.white)
                                 .padding(.leading)
-                            
+
                             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
                                 StatCard(icon: "figure.walk", title: "Distance", value: "2,547 km", change: "+125 km this month")
                                 StatCard(icon: "clock.fill", title: "Time", value: "187 hours", change: "+8 hrs this month")
@@ -91,15 +91,58 @@ struct ProfileView: View {
                         .background(Color(red: 20/255, green: 20/255, blue: 20/255))
                         .cornerRadius(16)
                         .padding(.horizontal)
-                        
+
                         Spacer()
                     }
                 }
             } else if let error = viewModel.errorMessage {
-                Text(error)
-                    .foregroundColor(.red)
-                    .multilineTextAlignment(.center)
-                    .padding()
+                // Show error + retry button
+                VStack(spacing: 12) {
+                    Text(error)
+                        .foregroundColor(.red)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                    HStack(spacing: 16) {
+                        Button(action: {
+                            Task { await viewModel.fetchUser() }
+                        }) {
+                            Text("Réessayer")
+                                .fontWeight(.semibold)
+                                .padding(.vertical, 10)
+                                .padding(.horizontal, 20)
+                                .background(Color.green)
+                                .foregroundColor(.black)
+                                .cornerRadius(8)
+                        }
+
+                        Button(action: {
+                            // Optionnel: effacer token et forcer la reconnexion
+                            do {
+                                try KeychainManager.shared.deleteJWT()
+                                // Ici tu peux poster une notification ou naviguer vers l'écran de login
+                            } catch {
+                                print("❌ Failed to delete token: \(error)")
+                            }
+                        }) {
+                            Text("Se déconnecter")
+                                .foregroundColor(.white)
+                                .padding(.vertical, 10)
+                                .padding(.horizontal, 20)
+                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.2)))
+                        }
+                    }
+                }
+                .padding()
+            } else {
+                // Etat neutre : inviter à recharger
+                VStack {
+                    Text("Aucun profil trouvé")
+                        .foregroundColor(.white)
+                    Button("Charger") {
+                        Task { await viewModel.fetchUser() }
+                    }
+                    .padding(.top, 8)
+                }
             }
         }
         .task {
@@ -108,13 +151,13 @@ struct ProfileView: View {
     }
 }
 
-// MARK: - StatCard Component
+// MARK: - StatCard Component (inchangé)
 struct StatCard: View {
     var icon: String
     var title: String
     var value: String
     var change: String
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
@@ -124,12 +167,12 @@ struct StatCard: View {
                     .foregroundColor(.gray)
                     .font(.subheadline)
             }
-            
+
             Text(value)
                 .foregroundColor(.white)
                 .font(.title3)
                 .fontWeight(.semibold)
-            
+
             Text(change)
                 .font(.footnote)
                 .foregroundColor(.green)

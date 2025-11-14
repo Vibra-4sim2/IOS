@@ -42,13 +42,16 @@ final class AuthService {
     }
     
     // MARK: - REGISTER
-    func register(firstName: String,
-                  lastName: String,
-                  gender: String,
-                  email: String,
-                  password: String,
-                  avatar: String? = nil,
-                  role: String? = nil) async throws -> User {
+    func register(
+        firstName: String,
+        lastName: String,
+        gender: String,
+        email: String,
+        password: String,
+        birthday: String? = nil,
+        avatar: String? = nil,
+        role: String? = nil
+    ) async throws -> User {
         
         guard let url = URL(string: "\(Constants.baseURL)/user") else {
             throw URLError(.badURL)
@@ -58,14 +61,17 @@ final class AuthService {
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
+        // ✔ Construction dynamique du body
         var body: [String: Any] = [
             "firstName": firstName,
             "lastName": lastName,
-            "Gender": gender, // ✅ correspond au backend
+            "Gender": gender,  // Doit être en majuscule pour correspondre au backend
             "email": email,
             "password": password
         ]
         
+        // Champs optionnels
+        if let birthday = birthday { body["birthday"] = birthday }
         if let avatar = avatar { body["avatar"] = avatar }
         if let role = role { body["role"] = role }
         
@@ -77,14 +83,17 @@ final class AuthService {
             throw URLError(.badServerResponse)
         }
         
+        // ❌ Mauvais status → log + throw
         guard (200...299).contains(httpResponse.statusCode) else {
             let serverMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
             print("❌ Server error \(httpResponse.statusCode): \(serverMessage)")
             throw URLError(.badServerResponse)
         }
         
+        // ✔ Décodage de l'utilisateur renvoyé
         return try JSONDecoder().decode(User.self, from: data)
     }
+
     
     // MARK: - FORGOT PASSWORD
     func forgotPassword(email: String) async throws -> ServerMessage {
@@ -177,6 +186,55 @@ final class AuthService {
             }
             return try JSONDecoder().decode(User.self, from: data)
         }
+    // MARK: - upload Avatar
+    func uploadAvatar(userId: String, imageData: Data, fileName: String = "avatar.jpg", mimeType: String = "image/jpeg") async throws -> User {
+        guard let url = URL(string: "\(Constants.baseURL)/user/\(userId)/upload") else {
+            throw URLError(.badURL)
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+
+        // Boundary pour multipart/form-data
+        let boundary = "Boundary-\(UUID().uuidString)"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        // Authorization si disponible (même approche que le reste du service)
+        if let token = try? KeychainManager.shared.getJWT() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        // Construction du body multipart
+        var body = Data()
+        func appendString(_ string: String) {
+            if let d = string.data(using: .utf8) { body.append(d) }
+        }
+
+        // Champ "file" — adapte "file" si ton backend attend un autre nom (ex: "avatar")
+        appendString("--\(boundary)\r\n")
+        appendString("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileName)\"\r\n")
+        appendString("Content-Type: \(mimeType)\r\n\r\n")
+        body.append(imageData)
+        appendString("\r\n")
+        appendString("--\(boundary)--\r\n")
+
+        request.httpBody = body
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+
+        guard (200...299).contains(httpResponse.statusCode) else {
+            let serverMessage = String(data: data, encoding: .utf8) ?? "Unknown error"
+            print("❌ Upload server error \(httpResponse.statusCode): \(serverMessage)")
+            throw URLError(.badServerResponse)
+        }
+
+        // J'assume que le serveur renvoie l'utilisateur mis à jour en JSON.
+        return try JSONDecoder().decode(User.self, from: data)
+    }
 }
 
 // MARK: - Response Models
@@ -186,10 +244,21 @@ struct ServerMessage: Codable {
 
 // MARK: - DTO pour update
 struct UpdateUserRequest: Codable {
-    var firstName: String
-    var lastName: String
-    var gender: String
-    var email: String
+    var firstName: String?
+    var lastName: String?
+    var email: String?
+    var birthday: String?   // "yyyy-MM-dd" ou autre format attendu
     var avatar: String?
-    var password: String
+    var password: String?
+
+    enum CodingKeys: String, CodingKey {
+        case firstName
+        case lastName
+        case email
+        case birthday
+        case avatar
+        case password
+    }
 }
+
+
