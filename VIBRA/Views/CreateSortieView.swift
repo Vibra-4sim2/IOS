@@ -19,7 +19,6 @@ struct CreateSortieView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                // Fond dégradé style maquettes
                 LinearGradient(
                     gradient: Gradient(colors: [
                         AppColors.BackgroundGradientStart,
@@ -33,7 +32,7 @@ struct CreateSortieView: View {
                 ScrollView {
                     VStack(spacing: 20) {
 
-                        // Petit header façon VIBRA
+                        // Header
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("VIBRA")
@@ -84,6 +83,13 @@ struct CreateSortieView: View {
 
                                 TextField("Capacité (optionnel)", value: $viewModel.capacite, formatter: NumberFormatter())
                                     .keyboardType(.numberPad)
+                                    .modifier(VibraFieldModifier())
+                                
+                                vibraTextField("Difficulté (ex: FACILE, MOYEN, DIFFICILE)", text: $viewModel.difficulte)
+                                vibraTextField("Niveau (ex: DEBUTANT, INTERMEDIAIRE, AVANCE)", text: $viewModel.niveau)
+                                
+                                TextField("Prix de la sortie (optionnel)", value: $viewModel.prixSortie, formatter: NumberFormatter())
+                                    .keyboardType(.decimalPad)
                                     .modifier(VibraFieldModifier())
                             }
                         }
@@ -193,19 +199,6 @@ struct CreateSortieView: View {
                             }
                         }
 
-                        // MARK: - Messages
-                        if let error = viewModel.errorMessage {
-                            Text(error)
-                                .foregroundColor(AppColors.ErrorRed)
-                                .font(.footnote)
-                        }
-
-                        if let success = viewModel.successMessage {
-                            Text(success)
-                                .foregroundColor(AppColors.SuccessGreen)
-                                .font(.footnote)
-                        }
-
                         // MARK: - CTA principal
                         Button {
                             Task { await viewModel.createSortieAndCamping() }
@@ -239,6 +232,16 @@ struct CreateSortieView: View {
             }
             .navigationTitle("")
             .navigationBarHidden(true)
+            .alert("Erreur", isPresented: $viewModel.showErrorAlert, actions: {
+                Button("OK", role: .cancel) { }
+            }, message: {
+                Text(viewModel.errorMessage ?? "Une erreur est survenue.")
+            })
+            .alert("Succès", isPresented: $viewModel.showSuccessAlert, actions: {
+                Button("OK", role: .cancel) { }
+            }, message: {
+                Text(viewModel.successMessage ?? "Opération réussie.")
+            })
         }
     }
 
@@ -361,7 +364,7 @@ struct VibraFieldModifier: ViewModifier {
     }
 }
 
-// MARK: - MapViewRepresentable inchangé (juste la couleur de route)
+// MARK: - MapViewRepresentable
 
 struct MapViewRepresentable: UIViewRepresentable {
 
@@ -449,3 +452,4 @@ struct CreateSortieView_Previews: PreviewProvider {
             .preferredColorScheme(.dark)
     }
 }
+

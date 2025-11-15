@@ -2,7 +2,7 @@
 //  CreateSortieViewModel.swift
 //  VIBRA
 //
-//  Created by mac book pro on 11/15/25.
+//  ViewModel création de sortie + camping, avec auth JWT & alertes
 //
 
 import Foundation
@@ -23,16 +23,18 @@ final class CreateSortieViewModel: ObservableObject {
     @Published var photoURL: String = ""
     @Published var capacite: Int? = nil
     
+    @Published var difficulte: String = "MOYEN"
+    @Published var niveau: String = "INTERMEDIAIRE"
+    @Published var prixSortie: Double? = nil
+    
     // MARK: - Itinéraire
     
     @Published var startCoordinate: CLLocationCoordinate2D? = nil
     @Published var endCoordinate: CLLocationCoordinate2D? = nil
     @Published var itineraire: ItineraireDTO? = nil
     
-    // Pour tracer la polyline
     @Published var routeCoordinates: [CLLocationCoordinate2D] = []
     
-    // Adresses (info pour backend / affichage)
     @Published var departAddressText: String = ""
     @Published var arriveeAddressText: String = ""
     
@@ -51,8 +53,12 @@ final class CreateSortieViewModel: ObservableObject {
     // MARK: - UI state
     
     @Published var isLoading: Bool = false
+    
     @Published var errorMessage: String? = nil
+    @Published var showErrorAlert: Bool = false
+    
     @Published var successMessage: String? = nil
+    @Published var showSuccessAlert: Bool = false
     
     private let service: SortieService
     
@@ -74,12 +80,13 @@ final class CreateSortieViewModel: ObservableObject {
     
     func fetchRoute() async {
         guard let start = startCoordinate, let end = endCoordinate else {
-            errorMessage = "Veuillez choisir un point de départ et un point d’arrivée."
+            showValidationError("Veuillez choisir un point de départ et un point d’arrivée.")
             return
         }
         
         isFetchingRoute = true
         errorMessage = nil
+        showErrorAlert = false
         
         do {
             let itin = try await service.fetchItineraire(
@@ -90,10 +97,8 @@ final class CreateSortieViewModel: ObservableObject {
                 arriveeName: arriveeAddressText.isEmpty ? nil : arriveeAddressText
             )
             
-            // Garder la réponse complète
             self.itineraire = itin
             
-            // Convertir la géométrie ORS → SwiftUI polyline
             if let geometry = itin.geometry {
                 self.routeCoordinates = geometry.map {
                     CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0])
@@ -103,11 +108,11 @@ final class CreateSortieViewModel: ObservableObject {
             }
             
         } catch SortieServiceError.openRouteError {
-            errorMessage = "Erreur OpenRouteService (vérifie la clé API et le profil)."
+            showValidationError("Erreur OpenRouteService (vérifie la clé API et le profil).")
         } catch SortieServiceError.decodingError {
-            errorMessage = "Erreur de lecture de la réponse OpenRouteService."
+            showValidationError("Erreur de lecture de la réponse OpenRouteService.")
         } catch {
-            errorMessage = "Erreur lors de la récupération de l’itinéraire."
+            showValidationError("Erreur lors de la récupération de l’itinéraire.")
         }
         
         isFetchingRoute = false
@@ -117,26 +122,37 @@ final class CreateSortieViewModel: ObservableObject {
     
     func createSortieAndCamping() async {
         errorMessage = nil
+        showErrorAlert = false
         successMessage = nil
+        showSuccessAlert = false
         isLoading = true
+        
+        #if DEBUG
+        if let token = try? KeychainManager.shared.getJWT() {
+            print("[CreateSortieVM] JWT from Keychain: \(token.prefix(32))...")
+        } else {
+            print("[CreateSortieVM] NO JWT in Keychain")
+        }
+        #endif
         
         do {
             guard !titre.isEmpty else {
                 throw ValidationError("Le titre de la sortie est obligatoire.")
             }
-            guard itineraire != nil else {
+            guard let itin = itineraire else {
                 throw ValidationError("Veuillez calculer l’itinéraire avant de créer la sortie.")
             }
             
-            var campingId: String? = nil
+            let isoFormatter = ISO8601DateFormatter()
             
-            // Camping si activé
+            // ---------- Camping ----------
+            var campingId: String? = nil
+            var campingJSON: String? = nil
+            
             if optionCamping {
                 guard !campingNom.isEmpty, !campingLieu.isEmpty else {
-                    throw ValidationError("Veuillez remplir les informations de camping.")
+                    throw ValidationError("Veuillez remplir les informations de camping (nom et lieu).")
                 }
-                
-                let formatter = ISO8601DateFormatter()
                 
                 let campingReq = CreateCampingRequest(
                     nom: campingNom,
@@ -144,40 +160,135 @@ final class CreateSortieViewModel: ObservableObject {
                     lieu: campingLieu,
                     prix: campingPrix,
                     participants: campingParticipants,
-                    dateDebut: formatter.string(from: campingDateDebut),
-                    dateFin: formatter.string(from: campingDateFin)
+                    dateDebut: isoFormatter.string(from: campingDateDebut),
+                    dateFin: isoFormatter.string(from: campingDateFin)
                 )
                 
-                let campingResp = try await service.createCamping(campingReq)
-                campingId = campingResp._id
+                do {
+                    let campingResp = try await service.createCamping(campingReq)
+                    campingId = campingResp._id
+                    
+                    var campingObj: [String: Any?] = [
+                        "nom": campingResp.nom,
+                        "lieu": campingResp.lieu,
+                        "prix": campingResp.prix,
+                        "participants": campingResp.participants,
+                        "dateDebut": campingResp.dateDebut,
+                        "dateFin": campingResp.dateFin,
+                        "description": campingResp.description
+                    ]
+                    
+                    campingObj = campingObj.filter { $0.value != nil }
+                    
+                    let data = try JSONSerialization.data(
+                        withJSONObject: campingObj.compactMapValues { $0 },
+                        options: []
+                    )
+                    campingJSON = String(data: data, encoding: .utf8)
+                    
+                    #if DEBUG
+                    print("[CreateSortieVM] Camping JSON: \(campingJSON ?? "nil")")
+                    #endif
+                    
+                } catch SortieServiceError.unauthorized {
+                    throw ValidationError("Vous n’êtes pas authentifié (401) pour créer un camping.")
+                }
             }
             
-            // Sortie
-            let formatter = ISO8601DateFormatter()
-            let sortieReq = CreateSortieRequest(
+            // ---------- Itinéraire JSON ----------
+            let itinDict = try buildItineraireJSONDict(from: itin)
+            let itinData = try JSONSerialization.data(withJSONObject: itinDict, options: [])
+            guard let itinJSON = String(data: itinData, encoding: .utf8) else {
+                throw ValidationError("Impossible de préparer les données d’itinéraire.")
+            }
+            
+            #if DEBUG
+            print("[CreateSortieVM] Itineraire JSON: \(itinJSON)")
+            #endif
+            
+            // ---------- Lieu de la sortie ----------
+            let lieuSortie: String?
+            if !departAddressText.isEmpty {
+                lieuSortie = departAddressText
+            } else if !arriveeAddressText.isEmpty {
+                lieuSortie = arriveeAddressText
+            } else {
+                lieuSortie = nil
+            }
+            
+            // ---------- Payload Sortie ----------
+            let sortiePayload = SortieService.CreateSortieMultipartPayload(
                 titre: titre,
                 description: description.isEmpty ? nil : description,
-                date: formatter.string(from: date),
+                dateISO: isoFormatter.string(from: date),
                 type: type,
-                option_camping: optionCamping,
-                photo: photoURL.isEmpty ? nil : photoURL,
-                camping: campingId,
+                optionCamping: optionCamping,
+                photoURL: photoURL.isEmpty ? nil : photoURL,
+                lieu: lieuSortie,
+                difficulte: difficulte,
+                niveau: niveau,
                 capacite: capacite,
-                itineraire: itineraire
+                prix: prixSortie,
+                campingId: campingId,
+                itineraireJSON: itinJSON,
+                campingJSON: campingJSON
             )
             
-            let sortieResp = try await service.createSortie(sortieReq)
+            let sortieResp = try await service.createSortieMultipart(sortiePayload)
             successMessage = "Sortie créée avec succès (id: \(sortieResp._id))"
+            showSuccessAlert = true
             
             resetForm()
             
         } catch let error as ValidationError {
-            errorMessage = error.message
+            showValidationError(error.message)
+        } catch SortieServiceError.unauthorized {
+            showValidationError("Vous n’êtes pas authentifié (401). Connectez-vous puis réessayez.")
+        } catch SortieServiceError.invalidResponse {
+            showValidationError("Réponse invalide du serveur lors de la création de la sortie.")
+        } catch SortieServiceError.decodingError {
+            showValidationError("Erreur de lecture de la réponse du serveur.")
         } catch {
-            errorMessage = "Erreur lors de la création de la sortie."
+            showValidationError("Erreur inconnue lors de la création de la sortie.")
         }
         
         isLoading = false
+    }
+    
+    private func buildItineraireJSONDict(from itin: ItineraireDTO) throws -> [String: Any] {
+        var dict: [String: Any] = [:]
+        
+        let depart: [String: Any] = [
+            "latitude": itin.pointDepart.latitude,
+            "longitude": itin.pointDepart.longitude,
+            "display_name": itin.pointDepart.display_name ?? "",
+            "address": itin.pointDepart.address ?? ""
+        ]
+        let arrivee: [String: Any] = [
+            "latitude": itin.pointArrivee.latitude,
+            "longitude": itin.pointArrivee.longitude,
+            "display_name": itin.pointArrivee.display_name ?? "",
+            "address": itin.pointArrivee.address ?? ""
+        ]
+        
+        dict["pointDepart"] = depart
+        dict["pointArrivee"] = arrivee
+        dict["description"] = itin.description ?? ""
+        
+        if let distance = itin.distance {
+            dict["distance"] = distance
+        }
+        if let duree = itin.duree_estimee {
+            dict["duree_estimee"] = duree
+        }
+        if let geometry = itin.geometry {
+            dict["geometry"] = geometry
+        }
+        if let instructions = itin.instructions {
+            dict["instructions"] = instructions
+        }
+        
+        return dict
     }
     
     // MARK: - Reset
@@ -190,6 +301,9 @@ final class CreateSortieViewModel: ObservableObject {
         optionCamping = false
         photoURL = ""
         capacite = nil
+        difficulte = "MOYEN"
+        niveau = "INTERMEDIAIRE"
+        prixSortie = nil
         
         startCoordinate = nil
         endCoordinate = nil
@@ -205,6 +319,13 @@ final class CreateSortieViewModel: ObservableObject {
         campingParticipants = nil
         campingDateDebut = Date()
         campingDateFin = Date().addingTimeInterval(86400)
+    }
+    
+    // MARK: - Helpers erreur
+    
+    private func showValidationError(_ message: String) {
+        errorMessage = message
+        showErrorAlert = true
     }
 }
 
