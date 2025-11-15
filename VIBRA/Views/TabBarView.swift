@@ -44,7 +44,7 @@ struct TabBarView: View {
                                 Text("Profile")
                             }
 
-                        Text("Add View")
+                        CreateSortieView()
                             .tabItem {
                                 Image(systemName: "plus")
                                 Text("Add")

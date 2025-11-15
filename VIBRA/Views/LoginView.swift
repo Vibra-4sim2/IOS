@@ -10,6 +10,9 @@ struct LoginView: View {
     @StateObject private var viewModel = LoginViewModel()
     @State private var rememberMe = false
     
+    // MARK: - Alert state
+    @State private var showAlert = false
+    
     var body: some View {
         NavigationStack {
             ZStack {
@@ -24,6 +27,7 @@ struct LoginView: View {
                     Spacer(minLength: 100)
                     
                     VStack(spacing: 24) {
+                        
                         // MARK: Header
                         VStack(spacing: 10) {
                             Image("logo")
@@ -104,16 +108,8 @@ struct LoginView: View {
                         }
                         .disabled(viewModel.isLoading)
                         
-                        // MARK: Error message
-                        if let error = viewModel.errorMessage {
-                            Text(error)
-                                .foregroundColor(.red)
-                                .font(.footnote)
-                                .padding(.top, 4)
-                                .multilineTextAlignment(.center)
-                        }
                         
-                        // MARK: Create Account Link
+                        // MARK: Register Link
                         HStack(spacing: 4) {
                             Text("Don't have an account?")
                                 .foregroundColor(.white.opacity(0.8))
@@ -123,6 +119,7 @@ struct LoginView: View {
                             }
                         }
                         .font(.footnote)
+                        
                         
                         // MARK: Social Login Buttons
                         HStack(spacing: 30) {
@@ -155,6 +152,16 @@ struct LoginView: View {
         .onAppear {
             viewModel.checkIfAlreadyLoggedIn()
         }
+        .onChange(of: viewModel.errorMessage) { _, newValue in
+            if newValue != nil {
+                showAlert = true
+            }
+        }
+        .alert("Error", isPresented: $showAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(viewModel.errorMessage ?? "Unknown error")
+        }
     }
     
     // MARK: - Custom Field
@@ -163,11 +170,13 @@ struct LoginView: View {
         HStack {
             Image(systemName: icon)
                 .foregroundColor(.green)
+            
             ZStack(alignment: .leading) {
                 if text.wrappedValue.isEmpty {
                     Text(placeholder)
                         .foregroundColor(.green.opacity(0.7))
                 }
+                
                 if isSecure {
                     SecureField("", text: text)
                         .foregroundColor(.white)

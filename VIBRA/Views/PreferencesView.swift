@@ -2,7 +2,6 @@
 //  AdventurePreferencesParentView.swift
 //  VIBRA
 //
-
 import SwiftUI
 
 struct PreferencesView: View {
@@ -57,12 +56,14 @@ struct PreferencesView: View {
             .task {
                 await viewModel.loadPreferences()
             }
+            /*
             .alert(item: Binding(
                 get: { viewModel.errorMessage.map { AlertWrapper(message: $0) } },
                 set: { _ in viewModel.errorMessage = nil }
             )) { wrapper in
                 Alert(title: Text("Error"), message: Text(wrapper.message), dismissButton: .default(Text("OK")))
             }
+            */
         }
     }
 }

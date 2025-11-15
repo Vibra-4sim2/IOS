@@ -50,7 +50,7 @@ struct RegisterView: View {
                             inputField(icon: "person", placeholder: "First name", text: $viewModel.firstName)
                             inputField(icon: "person", placeholder: "Last name", text: $viewModel.lastName)
 
-                            // ⚧ Gender + Birthday side-by-side
+                            // Gender + Birthday
                             HStack(spacing: 12) {
                                 // Gender Column
                                 VStack(alignment: .leading, spacing: 6) {
@@ -58,7 +58,6 @@ struct RegisterView: View {
                                         .foregroundColor(.white)
                                         .font(.footnote)
 
-                                    // SegmentedPicker with dark environment so text becomes white
                                     Picker("Select Gender", selection: $viewModel.gender) {
                                         Text("Male").tag("Male")
                                         Text("Female").tag("Female")
@@ -69,7 +68,7 @@ struct RegisterView: View {
                                     .background(Color.black.opacity(0.35))
                                     .cornerRadius(10)
                                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.15)))
-                                    .environment(\.colorScheme, .dark) // force white labels inside picker
+                                    .environment(\.colorScheme, .dark)
                                 }
                                 .frame(maxWidth: .infinity)
 
@@ -79,7 +78,6 @@ struct RegisterView: View {
                                         .foregroundColor(.white)
                                         .font(.footnote)
 
-                                    // DatePicker styled to match and with white text via dark color scheme
                                     DatePicker(
                                         "",
                                         selection: Binding(
@@ -104,20 +102,35 @@ struct RegisterView: View {
                                     .background(Color.black.opacity(0.35))
                                     .cornerRadius(10)
                                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.15)))
-                                    .environment(\.colorScheme, .dark) // force white text for the picker
+                                    .environment(\.colorScheme, .dark)
                                 }
                                 .frame(maxWidth: .infinity)
                             }
 
-                            inputField(icon: "envelope", placeholder: "Enter your email", text: $viewModel.email)
-                                .textInputAutocapitalization(.never)
-                                .keyboardType(.emailAddress)
+                            inputField(
+                                icon: "envelope",
+                                placeholder: "Enter your email",
+                                text: $viewModel.email
+                            )
+                            .textInputAutocapitalization(.never)
+                            .keyboardType(.emailAddress)
 
-                            // Password fields with visibility toggle
-                            passwordField(icon: "lock", placeholder: "Enter your password", text: $viewModel.password, show: $showPassword)
-                            passwordField(icon: "lock.rotation", placeholder: "Confirm password", text: $viewModel.confirmPassword, show: $showConfirmPassword)
+                            // Password fields
+                            passwordField(
+                                icon: "lock",
+                                placeholder: "Enter your password",
+                                text: $viewModel.password,
+                                show: $showPassword
+                            )
+                            
+                            passwordField(
+                                icon: "lock.rotation",
+                                placeholder: "Confirm password",
+                                text: $viewModel.confirmPassword,
+                                show: $showConfirmPassword
+                            )
 
-                            // ✅ Terms Toggle
+                            // Terms Toggle
                             HStack {
                                 Toggle(isOn: $viewModel.agreeTerms) {
                                     Text("I agree to the Terms & Privacy Policy")
@@ -134,11 +147,9 @@ struct RegisterView: View {
                         }) {
                             HStack {
                                 if viewModel.isLoading {
-                                    ProgressView()
-                                        .tint(.white)
+                                    ProgressView().tint(.white)
                                 } else {
-                                    Text("Sign up")
-                                        .fontWeight(.semibold)
+                                    Text("Sign up").fontWeight(.semibold)
                                     Image(systemName: "arrow.right")
                                 }
                             }
@@ -154,11 +165,8 @@ struct RegisterView: View {
                         HStack(spacing: 4) {
                             Text("Already have an account?")
                                 .foregroundColor(.white.opacity(0.8))
-                            Button(action: {
-                                // Navigation vers Login (à implémenter selon ton flow)
-                            }) {
-                                Text("Log in")
-                                    .foregroundColor(.green)
+                            Button(action: {}) {
+                                Text("Log in").foregroundColor(.green)
                             }
                         }
                         .font(.footnote)
@@ -168,30 +176,31 @@ struct RegisterView: View {
                     .padding(.horizontal, 30)
                     .frame(maxWidth: 400)
                     .frame(maxWidth: .infinity)
-                    .multilineTextAlignment(.center)
                 }
             }
+            // Navigation
             .navigationDestination(isPresented: $viewModel.isLoggedIn) {
                 PreferencesView()
             }
+            // ALERT — all error messages
             .alert(isPresented: $viewModel.showAlert) {
-                Alert(title: Text(viewModel.alertTitle),
-                      message: Text(viewModel.alertMessage),
-                      dismissButton: .default(Text("OK")))
+                Alert(
+                    title: Text(viewModel.alertTitle),
+                    message: Text(viewModel.alertMessage),
+                    dismissButton: .default(Text("OK"))
+                )
             }
-        } // NavigationStack
+        }
     }
 
     // MARK: - Custom Input Field
     private func inputField(icon: String, placeholder: String, text: Binding<String>) -> some View {
         HStack {
-            Image(systemName: icon)
-                .foregroundColor(.green)
+            Image(systemName: icon).foregroundColor(.green)
 
             ZStack(alignment: .leading) {
                 if text.wrappedValue.isEmpty {
-                    Text(placeholder)
-                        .foregroundColor(.white.opacity(0.6))
+                    Text(placeholder).foregroundColor(.white.opacity(0.6))
                 }
                 TextField("", text: text)
                     .foregroundColor(.white.opacity(0.9))
@@ -201,14 +210,16 @@ struct RegisterView: View {
         .padding()
         .background(Color.black.opacity(0.35))
         .cornerRadius(10)
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.15)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.white.opacity(0.15))
+        )
     }
 
-    // MARK: - Password Field with toggle
+    // MARK: - Password Field
     private func passwordField(icon: String, placeholder: String, text: Binding<String>, show: Binding<Bool>) -> some View {
         HStack {
-            Image(systemName: icon)
-                .foregroundColor(.green)
+            Image(systemName: icon).foregroundColor(.green)
 
             ZStack(alignment: .trailing) {
                 if show.wrappedValue {
@@ -230,7 +241,10 @@ struct RegisterView: View {
         .padding()
         .background(Color.black.opacity(0.35))
         .cornerRadius(10)
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.15)))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.white.opacity(0.15))
+        )
     }
 }
 
