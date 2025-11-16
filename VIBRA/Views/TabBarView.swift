@@ -129,6 +129,10 @@ struct TabBarView: View {
                 EmptyView()
             }
             .opacity(0)
+            // MARK: - Value-based destination for HomeView navigation
+            .navigationDestination(for: RideWithCreator.self) { item in
+                SortieDetailView(ride: item.ride, creator: item.creator)
+            }
         }
     }
 }
