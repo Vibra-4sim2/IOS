@@ -7,6 +7,8 @@ import Foundation
 import CoreLocation
 import MapKit
 import Combine
+import SwiftUI
+import PhotosUI
 
 @MainActor
 final class CreateSortieViewModel: ObservableObject {
@@ -20,7 +22,13 @@ final class CreateSortieViewModel: ObservableObject {
     @Published var description: String = ""
     @Published var date: Date = Date()
     @Published var optionCamping: Bool = false
-    @Published var photoURL: String = ""
+    
+    // Ancien champ URL supprimé, remplacé par sélection d'image
+    @Published var selectedPhotoItem: PhotosPickerItem? = nil
+    @Published var selectedUIImage: UIImage? = nil
+    @Published var photoData: Data? = nil
+    @Published var isLoadingImage: Bool = false
+    
     @Published var capacite: Int? = nil
     
     @Published var difficulte: String = "MOYEN"
@@ -61,9 +69,45 @@ final class CreateSortieViewModel: ObservableObject {
     @Published var showSuccessAlert: Bool = false
     
     private let service: SortieService
+    private var cancellables = Set<AnyCancellable>()
     
     init(service: SortieService = .shared) {
         self.service = service
+        
+        // Charger l'image quand selectedPhotoItem change
+        $selectedPhotoItem
+            .compactMap { $0 }
+            .sink { [weak self] item in
+                Task { await self?.loadImage(from: item) }
+            }
+            .store(in: &cancellables)
+    }
+    
+    // MARK: - Gestion image
+    
+    private func loadImage(from item: PhotosPickerItem) async {
+        isLoadingImage = true
+        defer { isLoadingImage = false }
+        
+        do {
+            if let data = try await item.loadTransferable(type: Data.self) {
+                await MainActor.run {
+                    self.photoData = data
+                    self.selectedUIImage = UIImage(data: data)
+                }
+            } else {
+                await MainActor.run {
+                    self.photoData = nil
+                    self.selectedUIImage = nil
+                }
+            }
+        } catch {
+            await MainActor.run {
+                self.photoData = nil
+                self.selectedUIImage = nil
+                self.showValidationError("Impossible de charger l’image sélectionnée.")
+            }
+        }
     }
     
     // MARK: - Map interactions
@@ -223,7 +267,7 @@ final class CreateSortieViewModel: ObservableObject {
                 dateISO: isoFormatter.string(from: date),
                 typeUI: type,   // 🟢 on passe la valeur UI, le service fera le mapping vers l'enum backend
                 optionCamping: optionCamping,
-                photoURL: photoURL.isEmpty ? nil : photoURL,
+                photoData: photoData,
                 lieu: lieuSortie,
                 difficulte: difficulte,
                 niveau: niveau,
@@ -299,7 +343,12 @@ final class CreateSortieViewModel: ObservableObject {
         date = Date()
         type = "RANDO"
         optionCamping = false
-        photoURL = ""
+        
+        selectedPhotoItem = nil
+        selectedUIImage = nil
+        photoData = nil
+        isLoadingImage = false
+        
         capacite = nil
         difficulte = "MOYEN"
         niveau = "INTERMEDIAIRE"
@@ -323,7 +372,7 @@ final class CreateSortieViewModel: ObservableObject {
     
     // MARK: - Helpers erreur
     
-    private func showValidationError(_ message: String) {
+    fileprivate func showValidationError(_ message: String) {
         errorMessage = message
         showErrorAlert = true
     }

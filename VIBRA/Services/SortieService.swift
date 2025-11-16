@@ -3,6 +3,7 @@
 //  VIBRA
 //
 //  Service Sortie/Camping + ORS avec auth JWT + multipart /sorties
+//  Version fusionnée
 //
 
 import Foundation
@@ -49,13 +50,43 @@ struct CampingResponse: Codable {
     let dateFin: String
 }
 
+// Sortie DTO pour création simple JSON (si tu veux l'utiliser côté backend REST classique)
+struct CreateSortieRequest: Codable {
+    let titre: String
+    let description: String?
+    let date: String              // ISO8601
+    let type: String              // SortieType raw: "RANDO", "VELO_ELECTRIQUE", etc.
+    let option_camping: Bool
+    let photo: String?
+    let camping: String?          // ObjectId camping
+    let capacite: Int?
+    let itineraire: ItineraireDTO?
+}
+
 // Sortie DTO retourné par le backend
 struct SortieResponse: Codable {
     let _id: String
-    let titre: String?
+    let titre: String
 }
 
 // MARK: - OpenRouteService DTOs (GeoJSON / directions)
+
+/*
+ GeoJSON response structure (directions/{profile}/geojson) typical:
+ {
+   "type":"FeatureCollection",
+   "features":[
+      {
+        "type":"Feature",
+        "properties":{
+           "segments":[ { "distance":..., "duration":..., "steps":[{ "instruction":... }, ...] } ],
+           "summary": { "distance":..., "duration":... }
+         },
+        "geometry": { "coordinates": [ [lon,lat], ... ] }
+      }
+   ]
+ }
+*/
 
 struct ORSFeatureCollection: Codable {
     let features: [ORSFeature]
@@ -90,7 +121,7 @@ struct ORSGeometry: Codable {
     let coordinates: [[Double]]   // [ [lon, lat], ... ]
 }
 
-// Fallback shape : {"routes":[{ "segments":[...], "summary": {...}, "geometry": { "coordinates": [...] } }]}
+// Fallback shape (JSON variant) : {"routes":[{ "segments":[...], "summary": {...}, "geometry": { "coordinates": [...] } }]}
 struct ORSRoutesWrapper: Codable {
     let routes: [ORSRoutesItem]
 }
@@ -196,14 +227,17 @@ final class SortieService {
         /// type côté UI: "RANDO", "VELO_ELECTRIQUE", "CAMPING"
         let typeUI: String
         let optionCamping: Bool
-        let photoURL: String?
+        /// Données binaires de la photo sélectionnée (optionnel)
+        let photoData: Data?
         let lieu: String?
         let difficulte: String?
         let niveau: String?
         let capacite: Int?
         let prix: Double?
         let campingId: String?
+        /// Itinéraire sérialisé en JSON (ItineraireDTO)
         let itineraireJSON: String
+        /// Camping sérialisé en JSON si création en même temps
         let campingJSON: String?
     }
     
@@ -246,6 +280,23 @@ final class SortieService {
             }
         }
         
+        func appendFileField(name: String, filename: String, mimeType: String, fileData: Data) {
+            var fieldData = Data()
+            var fieldHeader = ""
+            fieldHeader += "--\(boundary)\r\n"
+            fieldHeader += "Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(filename)\"\r\n"
+            fieldHeader += "Content-Type: \(mimeType)\r\n\r\n"
+            
+            if let headerData = fieldHeader.data(using: .utf8) {
+                fieldData.append(headerData)
+            }
+            fieldData.append(fileData)
+            if let closing = "\r\n".data(using: .utf8) {
+                fieldData.append(closing)
+            }
+            body.append(fieldData)
+        }
+        
         // Champs texte principaux
         appendFormField(name: "titre", value: payload.titre)
         if let desc = payload.description {
@@ -253,7 +304,7 @@ final class SortieService {
         }
         appendFormField(name: "date", value: payload.dateISO)
         
-        // 🟢 Ici on envoie la valeur de l'enum backend
+        // Envoi de la valeur de l'enum backend
         let typeBackend = mapTypeForBackend(from: payload.typeUI)
         appendFormField(name: "type", value: typeBackend)
         
@@ -287,9 +338,14 @@ final class SortieService {
             appendFormField(name: "camping", value: campingJSON)
         }
         
-        // Photo URL (optionnel)
-        if let photoURL = payload.photoURL, !photoURL.isEmpty {
-            appendFormField(name: "photo", value: photoURL)
+        // Photo fichier (optionnel)
+        if let photoData = payload.photoData {
+            appendFileField(
+                name: "photo",
+                filename: "sortie_photo.jpg",
+                mimeType: "image/jpeg",
+                fileData: photoData
+            )
         }
         
         // Fin du body
@@ -300,7 +356,7 @@ final class SortieService {
         request.httpBody = body
         
         #if DEBUG
-        print("[HTTP] POST \(url.absoluteString) (createSortie)")
+        print("[HTTP] POST \(url.absoluteString) (createSortieMultipart)")
         print("[HTTP] Headers (sortie): \(request.allHTTPHeaderFields ?? [:])")
         if let bodyString = String(data: body, encoding: .utf8) {
             print("[HTTP] Multipart body (truncated):")
@@ -333,8 +389,52 @@ final class SortieService {
         }
     }
     
+    // MARK: - Sortie simple en JSON (si tu veux aussi garder cette méthode)
+    
+    func createSortie(_ sortie: CreateSortieRequest) async throws -> SortieResponse {
+        let url = baseURL.appendingPathComponent("sorties")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        applyAuthHeader(to: &request)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(sortie)
+        
+        #if DEBUG
+        print("[HTTP] POST \(url.absoluteString) (createSortie JSON)")
+        if let bodyString = String(data: request.httpBody ?? Data(), encoding: .utf8) {
+            print("[HTTP] Request body (sortie JSON): \(bodyString)")
+        }
+        print("[HTTP] Headers (sortie JSON): \(request.allHTTPHeaderFields ?? [:])")
+        #endif
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw SortieServiceError.invalidResponse
+        }
+        
+        #if DEBUG
+        print("[HTTP] createSortie JSON status: \(http.statusCode)")
+        print("[HTTP] createSortie JSON raw response: \(String(data: data, encoding: .utf8) ?? "no body")")
+        #endif
+        
+        if http.statusCode == 401 {
+            throw SortieServiceError.unauthorized
+        }
+        
+        guard (200..<300).contains(http.statusCode) else {
+            throw SortieServiceError.invalidResponse
+        }
+        
+        do {
+            return try JSONDecoder().decode(SortieResponse.self, from: data)
+        } catch {
+            throw SortieServiceError.decodingError
+        }
+    }
+    
     // MARK: - OpenRouteService
     
+    /// Retourne l’URL ORS en fonction du type de sortie (on force /geojson)
     private func openRouteURL(for type: String) -> URL {
         let base = "https://api.openrouteservice.org/v2/directions/"
         let profile: String
@@ -353,6 +453,8 @@ final class SortieService {
         return URL(string: full)!
     }
     
+    /// Appel OpenRouteService pour obtenir l’itinéraire entre start et end.
+    /// `typeSortie` permet de choisir dynamiquement le bon profil (rando / vélo / camping).
     func fetchItineraire(
         start: CLLocationCoordinate2D,
         end: CLLocationCoordinate2D,
@@ -366,8 +468,10 @@ final class SortieService {
         request.httpMethod = "POST"
         request.setValue(openRouteApiKey, forHTTPHeaderField: "Authorization")
         request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        // On précise qu'on accepte du GeoJSON/JSON
         request.setValue("application/json, application/geo+json, application/geojson", forHTTPHeaderField: "Accept")
         
+        // Body conforme à la doc ORS
         let body: [String: Any] = [
             "coordinates": [
                 [start.longitude, start.latitude],
@@ -397,8 +501,9 @@ final class SortieService {
         
         let decoder = JSONDecoder()
         
-        if let fc = try? decoder.decode(ORSFeatureCollection.self, from: data),
-           let feature = fc.features.first {
+        // 1) Essayer GeoJSON (FeatureCollection) — le plus courant avec /geojson
+        if let orsFeatureCollection = try? decoder.decode(ORSFeatureCollection.self, from: data),
+           let feature = orsFeatureCollection.features.first {
             
             let summary = feature.properties.summary
             let segment = feature.properties.segments.first
@@ -431,8 +536,9 @@ final class SortieService {
             )
         }
         
-        if let routes = try? decoder.decode(ORSRoutesWrapper.self, from: data),
-           let route = routes.routes.first {
+        // 2) Fallback: essayer le format `routes` (parfois renvoyé si Accept diffère)
+        if let orsRoutes = try? decoder.decode(ORSRoutesWrapper.self, from: data),
+           let route = orsRoutes.routes.first {
             
             let summary = route.summary
             let segment = route.segments?.first
@@ -465,6 +571,7 @@ final class SortieService {
             )
         }
         
+        // Si on arrive ici -> échec décodage
         throw SortieServiceError.decodingError
     }
 }

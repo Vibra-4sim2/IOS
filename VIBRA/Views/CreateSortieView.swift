@@ -6,6 +6,7 @@
 import SwiftUI
 import MapKit
 import CoreLocation
+import PhotosUI
 
 struct CreateSortieView: View {
 
@@ -32,33 +33,6 @@ struct CreateSortieView: View {
                 ScrollView {
                     VStack(spacing: 20) {
 
-                        // Header
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("VIBRA")
-                                    .font(.system(size: 24, weight: .bold, design: .rounded))
-                                    .foregroundColor(AppColors.TextPrimary)
-                                Text("Créer une nouvelle aventure")
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundColor(AppColors.TextSecondary)
-                            }
-                            Spacer()
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [AppColors.GreenAccent, AppColors.TealAccent]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .frame(width: 42, height: 42)
-                                .shadow(color: AppColors.GlowGreen.opacity(0.7), radius: 10, x: 0, y: 4)
-                                .overlay(
-                                    Image(systemName: "person.fill")
-                                        .foregroundColor(.black)
-                                )
-                        }
-
                         // MARK: - Infos sortie
                         styledGroupBox(title: "Informations de la sortie", systemImage: "info.circle") {
                             VStack(alignment: .leading, spacing: 12) {
@@ -82,7 +56,54 @@ struct CreateSortieView: View {
                                 .pickerStyle(.segmented)
                                 .tint(AppColors.TealAccent)
 
-                                vibraTextField("URL de la photo (optionnel)", text: $viewModel.photoURL)
+                                // --------- Sélection d'image (remplace l'URL) ----------
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Photo de la sortie (optionnel)")
+                                        .font(.subheadline)
+                                        .foregroundColor(AppColors.TextSecondary)
+
+                                    HStack(spacing: 12) {
+                                        PhotosPicker(
+                                            selection: $viewModel.selectedPhotoItem,
+                                            matching: .images,
+                                            photoLibrary: .shared()
+                                        ) {
+                                            HStack {
+                                                Image(systemName: "photo.on.rectangle")
+                                                Text(viewModel.selectedPhotoItem == nil ? "Choisir une image" : "Changer l’image")
+                                            }
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .padding(.vertical, 10)
+                                            .padding(.horizontal, 14)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                                    .fill(AppColors.CardGlass)
+                                            )
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                                    .stroke(AppColors.DividerColor, lineWidth: 0.7)
+                                            )
+                                        }
+
+                                        if let image = viewModel.selectedUIImage {
+                                            Image(uiImage: image)
+                                                .resizable()
+                                                .scaledToFill()
+                                                .frame(width: 60, height: 60)
+                                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                                        .stroke(AppColors.DividerColor, lineWidth: 0.7)
+                                                )
+                                        }
+                                    }
+
+                                    if viewModel.isLoadingImage {
+                                        ProgressView("Chargement de l’image…")
+                                            .progressViewStyle(CircularProgressViewStyle(tint: AppColors.GreenAccent))
+                                            .font(.footnote)
+                                    }
+                                }
 
                                 TextField("Capacité (optionnel)", value: $viewModel.capacite, formatter: NumberFormatter())
                                     .keyboardType(.numberPad)
