@@ -2,8 +2,6 @@
 //  CreateSortieViewModel.swift
 //  VIBRA
 //
-//  ViewModel création de sortie + camping, avec auth JWT & alertes
-//
 
 import Foundation
 import CoreLocation
@@ -15,10 +13,12 @@ final class CreateSortieViewModel: ObservableObject {
     
     // MARK: - Champs Sortie
     
+    /// type côté UI: "RANDO", "VELO_ELECTRIQUE", "CAMPING"
+    @Published var type: String = "RANDO"
+    
     @Published var titre: String = ""
     @Published var description: String = ""
     @Published var date: Date = Date()
-    @Published var type: String = "RANDO"         // "RANDO" ou "VELO_ELECTRIQUE"
     @Published var optionCamping: Bool = false
     @Published var photoURL: String = ""
     @Published var capacite: Int? = nil
@@ -221,7 +221,7 @@ final class CreateSortieViewModel: ObservableObject {
                 titre: titre,
                 description: description.isEmpty ? nil : description,
                 dateISO: isoFormatter.string(from: date),
-                type: type,
+                typeUI: type,   // 🟢 on passe la valeur UI, le service fera le mapping vers l'enum backend
                 optionCamping: optionCamping,
                 photoURL: photoURL.isEmpty ? nil : photoURL,
                 lieu: lieuSortie,

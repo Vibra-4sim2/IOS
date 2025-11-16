@@ -193,17 +193,33 @@ final class SortieService {
         let titre: String
         let description: String?
         let dateISO: String
-        let type: String
+        /// type côté UI: "RANDO", "VELO_ELECTRIQUE", "CAMPING"
+        let typeUI: String
         let optionCamping: Bool
-        let photoURL: String?          // URL de la photo saisie par l’utilisateur
+        let photoURL: String?
         let lieu: String?
         let difficulte: String?
         let niveau: String?
         let capacite: Int?
         let prix: Double?
         let campingId: String?
-        let itineraireJSON: String     // JSON.stringify(Itineraire)
-        let campingJSON: String?       // JSON.stringify(camping) si cohérent
+        let itineraireJSON: String
+        let campingJSON: String?
+    }
+    
+    /// Map le type UI vers le type attendu par l'enum SortieType du backend
+    private func mapTypeForBackend(from typeUI: String) -> String {
+        switch typeUI {
+        case "RANDO":
+            return "RANDONNEE"
+        case "VELO_ELECTRIQUE":
+            return "VELO"
+        case "CAMPING":
+            return "CAMPING"
+        default:
+            // sécurité: une valeur inconnue est ramenée à RANDONNEE
+            return "RANDONNEE"
+        }
     }
     
     func createSortieMultipart(_ payload: CreateSortieMultipartPayload) async throws -> SortieResponse {
@@ -236,7 +252,11 @@ final class SortieService {
             appendFormField(name: "description", value: desc)
         }
         appendFormField(name: "date", value: payload.dateISO)
-        appendFormField(name: "type", value: payload.type)
+        
+        // 🟢 Ici on envoie la valeur de l'enum backend
+        let typeBackend = mapTypeForBackend(from: payload.typeUI)
+        appendFormField(name: "type", value: typeBackend)
+        
         appendFormField(name: "option_camping", value: payload.optionCamping ? "true" : "false")
         
         // Optionnels
@@ -267,7 +287,7 @@ final class SortieService {
             appendFormField(name: "camping", value: campingJSON)
         }
         
-        // Photo URL (optionnel, comme fallback si tu veux la stocker côté backend)
+        // Photo URL (optionnel)
         if let photoURL = payload.photoURL, !photoURL.isEmpty {
             appendFormField(name: "photo", value: photoURL)
         }
@@ -322,6 +342,9 @@ final class SortieService {
         case "VELO_ELECTRIQUE":
             profile = "cycling-regular"
         case "RANDO":
+            profile = "foot-walking"
+        case "CAMPING":
+            // pour un camping on garde un profil à pied par défaut
             profile = "foot-walking"
         default:
             profile = "foot-walking"

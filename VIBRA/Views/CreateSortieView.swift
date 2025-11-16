@@ -72,9 +72,12 @@ struct CreateSortieView: View {
                                 )
                                 .accentColor(AppColors.GreenAccent)
 
+                                // IMPORTANT : valeurs UI "RANDO" / "VELO_ELECTRIQUE" / "CAMPING"
+                                // qui seront ensuite mappées vers l'enum backend: RANDONNEE / VELO / CAMPING
                                 Picker("Type", selection: $viewModel.type) {
                                     Text("Randonnée").tag("RANDO")
                                     Text("Vélo électrique").tag("VELO_ELECTRIQUE")
+                                    Text("Camping").tag("CAMPING")
                                 }
                                 .pickerStyle(.segmented)
                                 .tint(AppColors.TealAccent)
@@ -452,4 +455,3 @@ struct CreateSortieView_Previews: PreviewProvider {
             .preferredColorScheme(.dark)
     }
 }
-
