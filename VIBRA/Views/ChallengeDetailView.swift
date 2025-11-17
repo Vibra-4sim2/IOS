@@ -2,8 +2,8 @@
 // VIBRA
 //
 // Created by mac book pro on 11/10/25.
-//
-
+//*
+/*
 import SwiftUI
 import MapKit
 
@@ -174,14 +174,14 @@ struct Challenge {
     let numberOfParticipants: Int
     let coordinates: [CLLocationCoordinate2D]
 }
-
+/*
 struct Participant: Identifiable {
     var id: String { email }
     let name: String
     let age: Int
     let level: String
     let email: String
-}
+}*/
 
 // MARK: - MapPoint Identifiable
 struct MapPoint: Identifiable {
@@ -277,3 +277,4 @@ struct ChallengeDetailView_Previews: PreviewProvider {
         ChallengeDetailView()
     }
 }
+*/

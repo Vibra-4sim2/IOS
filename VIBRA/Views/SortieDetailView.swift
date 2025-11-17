@@ -42,7 +42,7 @@ struct SortieDetailView: View {
                     }
                     .padding(.horizontal)
 
-                    // Description + Itinéraire + Météo groupés dans une card
+                    // Description + Itinéraire + Météo + Participants groupés dans une card
                     VStack(spacing: 12) {
                         descriptionSection
 
@@ -50,7 +50,13 @@ struct SortieDetailView: View {
                         weatherSection
 
                         Divider().background(AppColors.DividerColor)
+
                         mapSection
+
+                        Divider().background(AppColors.DividerColor)
+
+                        // NEW: section participants
+                        participantsSection
                     }
                     .padding()
                     .background(
@@ -340,6 +346,59 @@ struct SortieDetailView: View {
         }
     }
 
+    // MARK: - Participants Section (NEW)
+    private var participantsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Participants")
+                    .font(.headline)
+                    .foregroundColor(AppColors.TextPrimary)
+                Spacer()
+                let count = max(vm.participants.count, vm.participantIds.count)
+                if count > 0 {
+                    Text("\(count) inscrit\(count > 1 ? "s" : "")")
+                        .font(.footnote)
+                        .foregroundColor(AppColors.TextSecondary)
+                }
+            }
+
+            if vm.participants.isEmpty && vm.participantIds.isEmpty {
+                Text("Aucun participant pour le moment")
+                    .font(.footnote)
+                    .foregroundColor(AppColors.TextTertiary)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    // Participants complets (User)
+                    ForEach(vm.participants, id: \.id) { user in
+                        ParticipantRow(user: user)
+                    }
+
+                    // IDs sans user chargé (au cas où)
+                    let remainingIds = vm.participantIds.filter { pid in
+                        !vm.participants.contains(where: { $0.id == pid })
+                    }
+                    if !remainingIds.isEmpty {
+                        ForEach(remainingIds, id: \.self) { pid in
+                            HStack(spacing: 8) {
+                                Circle()
+                                    .fill(AppColors.CardGlass)
+                                    .frame(width: 32, height: 32)
+                                    .overlay(
+                                        Image(systemName: "person.fill")
+                                            .font(.system(size: 14))
+                                            .foregroundColor(AppColors.TextTertiary)
+                                    )
+                                Text("Participant \(pid.prefix(6))…")
+                                    .font(.footnote)
+                                    .foregroundColor(AppColors.TextSecondary)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - Participate Button
     private var participateButton: some View {
         VStack(spacing: 10) {
@@ -401,6 +460,68 @@ struct SortieDetailView: View {
     private func distanceText(_ meters: Int) -> String {
         if meters >= 1000 { return String(format: "%.1f km", Double(meters) / 1000.0) }
         return "\(meters) m"
+    }
+}
+
+// MARK: - Participant Row (NEW)
+private struct ParticipantRow: View {
+    let user: User
+
+    private var initials: String {
+        let f = user.firstName.first.map(String.init) ?? ""
+        let l = user.lastName.first.map(String.init) ?? ""
+        let txt = (f + l)
+        return txt.isEmpty ? "?" : txt.uppercased()
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            if let avatar = user.avatar, let url = URL(string: avatar) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        Circle()
+                            .fill(AppColors.CardGlass)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    case .failure:
+                        Circle()
+                            .fill(AppColors.CardGlass)
+                            .overlay(Text(initials)
+                                .font(.caption.bold())
+                                .foregroundColor(AppColors.TextPrimary))
+                    @unknown default:
+                        Circle().fill(AppColors.CardGlass)
+                    }
+                }
+                .frame(width: 32, height: 32)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(AppColors.DividerColor, lineWidth: 0.8))
+            } else {
+                Circle()
+                    .fill(AppColors.CardGlass)
+                    .frame(width: 32, height: 32)
+                    .overlay(
+                        Text(initials)
+                            .font(.caption.bold())
+                            .foregroundColor(AppColors.TextPrimary)
+                    )
+                    .overlay(Circle().stroke(AppColors.DividerColor, lineWidth: 0.8))
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(user.firstName) \(user.lastName)")
+                    .font(.footnote)
+                    .foregroundColor(AppColors.TextPrimary)
+                Text(user.email)
+                    .font(.caption2)
+                    .foregroundColor(AppColors.TextSecondary)
+            }
+
+            Spacer()
+        }
     }
 }
 
@@ -486,7 +607,8 @@ private struct SinglePointMap: View {
       "duree_estimee": 18000,
       "pointDepart": { "latitude": 45.8326, "longitude": 6.8652 },
       "pointArrivee": { "latitude": 45.9237, "longitude": 6.8694 },
-      "difficulte": "moyen"
+      "difficulte": "moyen",
+      "participantIds": ["u1","u2"]
     }
     """.data(using: .utf8)!
     let ride = try! JSONDecoder().decode(Ride.self, from: data)

@@ -4,110 +4,54 @@
 //
 //  Created by mac book pro on 11/7/25.
 //
-// HomeView.swift
+
 import SwiftUI
 
 struct HomeView: View {
     @StateObject private var viewModel = HomeViewModel()
-    @State private var searchText = ""
-    @State private var selectedTab = "Explore"
-    @State private var selectedActivity = "All"
 
     var body: some View {
-        NavigationStack { // Added navigation container
+        NavigationStack {
             ZStack {
-                // 🌌 Arrière-plan sombre et flou
+                // 🌌 Arrière-plan cohérent avec l'app
                 LinearGradient(
-                    gradient: Gradient(colors: [Color.black, Color.black.opacity(0.9)]),
-                    startPoint: .top,
-                    endPoint: .bottom
+                    gradient: Gradient(colors: [AppColors.BackgroundGradientStart, AppColors.BackgroundGradientEnd]),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
                 )
                 .ignoresSafeArea()
 
                 VStack(spacing: 16) {
                     // 🔍 Barre de recherche avec effet verre
-                    HStack {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundColor(.white.opacity(0.8))
-                        TextField("Search", text: $searchText)
-                            .foregroundColor(.white)
-                        Spacer()
-                        Image(systemName: "mic.fill")
-                            .foregroundColor(.white.opacity(0.8))
-                    }
-                    .padding()
-                    .background(.ultraThinMaterial)
-                    .cornerRadius(15)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 15)
-                            .stroke(Color.white.opacity(0.15), lineWidth: 1)
-                    )
-                    .shadow(color: .white.opacity(0.1), radius: 8)
-                    .padding(.horizontal)
+                    searchBar
 
                     // 🚴‍♂️ Filtre activité (Randonnée / Vélo)
-                    HStack(spacing: 12) {
-                        ActivityFilterButton(title: "All", isSelected: selectedActivity == "All") { selectedActivity = "All" }
-                        ActivityFilterButton(title: "Randonnée", isSelected: selectedActivity == "Randonnée") { selectedActivity = "Randonnée" }
-                        ActivityFilterButton(title: "Vélo", isSelected: selectedActivity == "Vélo") { selectedActivity = "Vélo" }
-                        Spacer()
-                    }
-                    .padding(.horizontal)
+                    activityFilterBar
 
-                    // 📝 Boutons principaux
-                    HStack(spacing: 10) {
-                        FilterButton(title: "Followers", isSelected: selectedTab == "Followers") { selectedTab = "Followers" }
-                        FilterButton(title: "Recommendation", isSelected: selectedTab == "Recommendation") { selectedTab = "Recommendation" }
-                        FilterButton(title: "Explore", isSelected: selectedTab == "Explore") { selectedTab = "Explore" }
-                    }
-                    .padding(.horizontal)
+                    // 📝 Boutons principaux (Followers / Recommendation / Explore)
+                    mainFilterBar
 
                     // 📋 Liste des sorties
                     ScrollView {
                         LazyVStack(spacing: 20) {
                             if viewModel.isLoading {
-                                ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .white)).padding()
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: AppColors.GreenAccent))
+                                    .padding()
                                 Text("Chargement des sorties...")
-                                    .foregroundColor(.white.opacity(0.7))
+                                    .foregroundColor(AppColors.TextSecondary)
                                     .font(.caption)
                             } else if let error = viewModel.errorMessage {
-                                VStack(spacing: 10) {
-                                    Image(systemName: "exclamationmark.triangle.fill")
-                                        .font(.largeTitle)
-                                        .foregroundColor(.red)
-                                    Text("Erreur de chargement")
-                                        .foregroundColor(.red)
-                                        .font(.headline)
-                                    Text(error)
-                                        .foregroundColor(.red)
-                                        .font(.caption)
-                                        .multilineTextAlignment(.center)
-                                    Button("Réessayer") { Task { await viewModel.load() } }
-                                        .padding()
-                                        .background(Color.green)
-                                        .foregroundColor(.white)
-                                        .cornerRadius(10)
-                                }
-                                .padding()
-                            } else if viewModel.items.isEmpty {
-                                VStack(spacing: 10) {
-                                    Image(systemName: "tray.fill")
-                                        .font(.largeTitle)
-                                        .foregroundColor(.gray)
-                                    Text("Aucune sortie disponible")
-                                        .foregroundColor(.gray)
-                                        .font(.headline)
-                                    Text("Les sorties s'afficheront ici")
-                                        .foregroundColor(.gray.opacity(0.7))
-                                        .font(.caption)
-                                }
-                                .padding()
+                                errorStateView(error: error)
+                            } else if viewModel.filteredItems.isEmpty {
+                                emptyStateView
                             } else {
-                                Text("✅ \(viewModel.items.count) sortie(s) chargée(s)")
-                                    .foregroundColor(.green)
+                                Text("✅ \(viewModel.filteredItems.count) sortie(s) trouvée(s)")
+                                    .foregroundColor(AppColors.GreenAccent)
                                     .font(.caption)
                                     .padding(.bottom, 5)
-                                ForEach(viewModel.items, id: \.id) { item in
+
+                                ForEach(viewModel.filteredItems, id: \.ride.id) { item in
                                     NavigationLink(destination: SortieDetailView(ride: item.ride, creator: item.creator)) {
                                         RideCardView(item: item)
                                             .contentShape(Rectangle())
@@ -132,9 +76,160 @@ struct HomeView: View {
             }
         }
     }
+
+    // MARK: - Search Bar
+    private var searchBar: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .foregroundColor(AppColors.TextSecondary)
+
+            TextField("Rechercher une sortie, un lieu, un organisateur...", text: $viewModel.searchText)
+                .foregroundColor(AppColors.TextPrimary)
+                .textInputAutocapitalization(.never)
+                .disableAutocorrection(true)
+
+            if !viewModel.searchText.isEmpty {
+                Button {
+                    viewModel.searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(AppColors.TextSecondary.opacity(0.8))
+                }
+            }
+
+            Image(systemName: "mic.fill")
+                .foregroundColor(AppColors.TextSecondary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(AppColors.CardGlass)
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(AppColors.DividerColor, lineWidth: 0.8)
+        )
+        .shadow(color: AppColors.ShadowColor.opacity(0.8), radius: 8, x: 0, y: 4)
+        .padding(.horizontal)
+    }
+
+    // MARK: - Activity Filter (All / Randonnée / Vélo)
+    private var activityFilterBar: some View {
+        HStack(spacing: 10) {
+            ActivityFilterButton(
+                title: "All",
+                isSelected: viewModel.selectedActivity == "All"
+            ) {
+                viewModel.selectedActivity = "All"
+            }
+
+            ActivityFilterButton(
+                title: "Randonnée",
+                isSelected: viewModel.selectedActivity == "Randonnée"
+            ) {
+                viewModel.selectedActivity = "Randonnée"
+            }
+
+            ActivityFilterButton(
+                title: "Vélo",
+                isSelected: viewModel.selectedActivity == "Vélo"
+            ) {
+                viewModel.selectedActivity = "Vélo"
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal)
+    }
+
+    // MARK: - Main Filter Bar (Followers / Recommendation / Explore)
+    private var mainFilterBar: some View {
+        HStack(spacing: 10) {
+            FilterButton(
+                title: "Followers",
+                isSelected: viewModel.selectedTab == "Followers"
+            ) {
+                viewModel.selectedTab = "Followers"
+            }
+
+            FilterButton(
+                title: "Recommendation",
+                isSelected: viewModel.selectedTab == "Recommendation"
+            ) {
+                viewModel.selectedTab = "Recommendation"
+            }
+
+            FilterButton(
+                title: "Explore",
+                isSelected: viewModel.selectedTab == "Explore"
+            ) {
+                viewModel.selectedTab = "Explore"
+            }
+        }
+        .padding(.horizontal)
+    }
+
+    // MARK: - Error State
+    @ViewBuilder
+    private func errorStateView(error: String) -> some View {
+        VStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.largeTitle)
+                .foregroundColor(.red)
+            Text("Erreur de chargement")
+                .foregroundColor(.red)
+                .font(.headline)
+            Text(error)
+                .foregroundColor(.red)
+                .font(.caption)
+                .multilineTextAlignment(.center)
+            Button {
+                Task { await viewModel.load() }
+            } label: {
+                Text("Réessayer")
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
+                    .background(AppColors.GreenAccent)
+                    .foregroundColor(.black)
+                    .cornerRadius(12)
+            }
+        }
+        .padding()
+        .background(AppColors.CardDark.opacity(0.9))
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(AppColors.BorderColor, lineWidth: 0.6)
+        )
+        .padding(.top, 40)
+    }
+
+    // MARK: - Empty State
+    private var emptyStateView: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "tray.fill")
+                .font(.largeTitle)
+                .foregroundColor(AppColors.TextTertiary)
+            Text("Aucune sortie trouvée")
+                .foregroundColor(AppColors.TextPrimary)
+                .font(.headline)
+            Text("Essaie de modifier ta recherche ou tes filtres")
+                .foregroundColor(AppColors.TextSecondary)
+                .font(.caption)
+        }
+        .padding()
+        .background(AppColors.CardDark.opacity(0.9))
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(AppColors.BorderColor, lineWidth: 0.6)
+        )
+        .padding(.top, 40)
+    }
 }
 
-// MARK: - Boutons
+// MARK: - Boutons filtres
+
 struct FilterButton: View {
     var title: String
     var isSelected: Bool
@@ -143,16 +238,26 @@ struct FilterButton: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.subheadline)
+                .font(.caption.weight(.semibold))
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(isSelected ? Color.green.opacity(0.8) : Color.white.opacity(0.08))
-                .cornerRadius(10)
-                .foregroundColor(isSelected ? .white : .gray)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: isSelected
+                                           ? [AppColors.GreenAccent, AppColors.GreenDark]
+                                           : [AppColors.CardGlass, AppColors.CardGlass.opacity(0.7)]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
                 )
+                .foregroundColor(isSelected ? .black : AppColors.TextSecondary)
+                .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(AppColors.DividerColor, lineWidth: 0.8)
+                )
+                .shadow(color: isSelected ? AppColors.GlowGreen.opacity(0.7) : AppColors.ShadowColor.opacity(0.3),
+                        radius: 8, x: 0, y: 4)
         }
     }
 }
@@ -164,17 +269,40 @@ struct ActivityFilterButton: View {
 
     var body: some View {
         Button(action: action) {
-            Text(title)
-                .font(.subheadline)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
-                .background(isSelected ? Color.green.opacity(0.8) : Color.white.opacity(0.08))
-                .cornerRadius(10)
-                .foregroundColor(isSelected ? .white : .gray)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                )
+            HStack(spacing: 6) {
+                if title == "Randonnée" {
+                    Image(systemName: "figure.hiking")
+                        .font(.system(size: 13, weight: .semibold))
+                } else if title == "Vélo" {
+                    Image(systemName: "bicycle")
+                        .font(.system(size: 13, weight: .semibold))
+                } else {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+
+                Text(title)
+                    .font(.caption.weight(.medium))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(
+                (isSelected
+                 ? AnyShapeStyle(LinearGradient(
+                        gradient: Gradient(colors: [AppColors.GreenAccent, AppColors.GreenDark]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ))
+                 : AnyShapeStyle(AppColors.CardGlass))
+            )
+            .cornerRadius(12)
+            .foregroundColor(isSelected ? .black : AppColors.TextSecondary)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(AppColors.DividerColor, lineWidth: 0.8)
+            )
+            .shadow(color: isSelected ? AppColors.GlowGreen.opacity(0.7) : AppColors.ShadowColor.opacity(0.3),
+                    radius: 6, x: 0, y: 3)
         }
     }
 }
@@ -182,6 +310,8 @@ struct ActivityFilterButton: View {
 // MARK: - Preview
 struct HomeView_Previews: PreviewProvider {
     static var previews: some View {
-        TabBarView() // ✅ TabBar affichée correctement
+        TabBarView()
+            .preferredColorScheme(.dark)
     }
 }
+
