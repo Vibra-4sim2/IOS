@@ -14,7 +14,8 @@ struct VIBRAApp: App {
 
     var body: some Scene {
         WindowGroup {
-            SplashScreenView() // ✅ Démarre toujours par le Splash
+            // ✅ Démarre toujours par le Splash
+            SplashScreenView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
         }
     }

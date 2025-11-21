@@ -2,13 +2,14 @@
 //  AddPublicationViewModel.swift
 //  VIBRA
 //
-//  Created by mac book pro on 11/21/25.
+//  Le service s’occupe de récupérer l’ID auteur via le JWT.
+//  Ce ViewModel ne manipule que les champs et l'état.
 //
+
 import Foundation
 import SwiftUI
 import Combine
 
-/// États possibles de l'UI d'ajout de publication
 enum AddPublicationUiState {
     case idle
     case loading
@@ -19,10 +20,8 @@ enum AddPublicationUiState {
 @MainActor
 final class AddPublicationViewModel: ObservableObject {
 
-    // Etat UI
     @Published var uiState: AddPublicationUiState = .idle
 
-    // Champs du formulaire
     @Published var content: String = ""
     @Published var selectedTags: [String] = []
     @Published var mentionedUsers: [String] = []
@@ -30,8 +29,6 @@ final class AddPublicationViewModel: ObservableObject {
     @Published var selectedImage: UIImage? = nil
 
     private let service = PublicationService.shared
-
-    // MARK: - Mise à jour des champs
 
     func updateContent(_ newContent: String) {
         content = newContent
@@ -73,8 +70,6 @@ final class AddPublicationViewModel: ObservableObject {
         selectedImage = image
     }
 
-    // MARK: - Publication
-
     func publishPublication() {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -92,7 +87,6 @@ final class AddPublicationViewModel: ObservableObject {
                 mentions: mentionedUsers.isEmpty ? nil : mentionedUsers,
                 location: location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : location
             )
-
             switch result {
             case .success(let publication):
                 uiState = .success(publicationId: publication.id)
@@ -103,7 +97,7 @@ final class AddPublicationViewModel: ObservableObject {
         }
     }
 
-    func resetForm() {
+    private func resetForm() {
         content = ""
         selectedTags = []
         mentionedUsers = []

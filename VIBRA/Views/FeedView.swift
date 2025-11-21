@@ -18,20 +18,31 @@ struct FeedView: View {
 
     @StateObject private var viewModel = FeedViewModel()
 
+    /// Appelé quand l'utilisateur veut créer un post
     var onCreatePost: (() -> Void)?
+    /// Appelé quand l'utilisateur veut ouvrir les détails / commentaires d'une publication
     var onOpenPost: ((PublicationResponse) -> Void)?
 
-    var body: some View {
-        ZStack {
-            BackgroundDark.ignoresSafeArea()
+    // 🔥 Navigation interne vers l'écran d'ajout
+    @State private var isShowingAddPublication = false
 
-            content
-                .padding(.top, 8)
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                BackgroundDark.ignoresSafeArea()
+
+                content
+                    .padding(.top, 8)
+            }
+            .refreshable {
+                viewModel.refreshFeed()
+            }
+            .navigationBarHidden(true)
+            // Navigation vers AddPublicationView
+            .navigationDestination(isPresented: $isShowingAddPublication) {
+                AddPublicationView()
+            }
         }
-        .refreshable {
-            viewModel.refreshFeed()
-        }
-        .navigationBarHidden(true) // 🔥 supprime totalement le header de navigation
     }
 
     @ViewBuilder
@@ -44,7 +55,12 @@ struct FeedView: View {
         case .success:
             feedList
         case .empty:
-            EmptyStateView(onCreatePost: { onCreatePost?() })
+            // Bouton "Create Post" déclenche la navigation interne
+            EmptyStateView(onCreatePost: {
+                // Si un handler externe existe, on l'appelle en plus
+                onCreatePost?()
+                isShowingAddPublication = true
+            })
         case .error(let message):
             ErrorStateView(message: message, onRetry: { viewModel.refreshFeed() })
         }
@@ -54,16 +70,19 @@ struct FeedView: View {
         ScrollView {
             VStack(spacing: 20) {
 
-                // 🔥 Header modernisé
-                FeedHeaderView(onCreatePost: { onCreatePost?() })
-                    .padding(.top, 8)
+                // Header : clique sur "What's on your mind?" → ouvre AddPublicationView
+                FeedHeaderView(onCreatePost: {
+                    onCreatePost?()
+                    isShowingAddPublication = true
+                })
+                .padding(.top, 8)
 
                 ForEach(viewModel.publications) { publication in
                     PostCardView(
                         publication: publication,
                         initialIsLiked: viewModel.isLikedByCurrentUser(publication),
                         onLikeClick: { viewModel.toggleLike(publicationId: publication.id) },
-                        onCommentClick: { onOpenPost?(publication) },
+                        onCommentClick: { onOpenPost?(publication) }, // ouvre détails / commentaires
                         onShareClick: {},
                         onMenuClick: {}
                     )

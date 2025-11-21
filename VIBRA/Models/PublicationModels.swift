@@ -20,6 +20,8 @@ struct CreatePublicationRequest: Codable {
 // MARK: - Response Models
 
 /// Response pour POST /publication (author = String)
+/// NOTE: ton service `createPublication` décode actuellement `PublicationResponse`.
+/// Garde ce modèle si ton backend renvoie un format différent au POST.
 struct PublicationCreateResponse: Codable, Identifiable {
     let id: String
     let author: String
@@ -128,7 +130,7 @@ struct PublicationErrorResponse: Codable {
     let error: String?
 }
 
-// Pour message qui peut être String ou [String]
+/// Pour un champ `message` qui peut être String ou [String]
 struct AnyCodable: Codable {
     let value: Any?
 

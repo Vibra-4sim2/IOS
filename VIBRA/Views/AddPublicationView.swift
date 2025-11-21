@@ -2,11 +2,11 @@
 //  AddPublicationView.swift
 //  VIBRA
 //
+//  Ajout : alerte de succès après publication, puis retour vers le Feed.
 //  Created by mac book pro on 11/21/25.
 //
 import SwiftUI
 import PhotosUI
-import Combine
 
 private let BackgroundDark = Color(red: 0x0F/255, green: 0x0F/255, blue: 0x0F/255)
 private let CardBackground = Color(red: 0x1A/255, green: 0x1A/255, blue: 0x1A/255)
@@ -22,6 +22,8 @@ struct AddPublicationView: View {
 
     @State private var showTagSheet = false
     @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var showSuccessAlert = false
+    @State private var publishedId: String?
 
     var body: some View {
         ZStack {
@@ -33,17 +35,11 @@ struct AddPublicationView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         headerUser
-
                         contentField
-
                         imagePreview
-
                         selectedTagsView
-
                         actionsRow
-
                         publishButton
-
                         tipsCard
                     }
                     .padding(16)
@@ -51,8 +47,18 @@ struct AddPublicationView: View {
             }
         }
         .onReceive(viewModel.$uiState) { state in
-            if case .success = state {
-                dismiss()
+            switch state {
+            case .success(let id):
+                publishedId = id
+                showSuccessAlert = true
+                // Si tu veux un retour automatique sans bouton OK, décommente ceci :
+                /*
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) {
+                    dismiss()
+                }
+                */
+            default:
+                break
             }
         }
         .sheet(isPresented: $showTagSheet) {
@@ -88,6 +94,13 @@ struct AddPublicationView: View {
                 }
             }
         }
+        .alert("Publication publiée", isPresented: $showSuccessAlert) {
+            Button("OK") {
+                dismiss() // retour vers FeedView
+            }
+        } message: {
+            Text("Votre publication a été ajoutée au feed.")
+        }
     }
 
     // MARK: - Subviews
@@ -98,15 +111,11 @@ struct AddPublicationView: View {
                 Image(systemName: "xmark")
                     .foregroundColor(TextPrimary)
             }
-
             Spacer()
-
             Text("New Post")
                 .foregroundColor(TextPrimary)
                 .font(.system(size: 18, weight: .bold))
-
             Spacer()
-
             Image(systemName: "xmark")
                 .foregroundColor(.clear)
         }
@@ -116,7 +125,7 @@ struct AddPublicationView: View {
     }
 
     private var headerUser: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(spacing: 12) {
             ZStack {
                 Circle()
                     .stroke(GreenAccent.opacity(0.3), lineWidth: 2)
@@ -126,7 +135,7 @@ struct AddPublicationView: View {
                     .fill(Color(red: 0x37/255, green: 0x41/255, blue: 0x51/255))
                     .frame(width: 44, height: 44)
                     .overlay(
-                        Text("YO") // TODO: mettre les initiales de l'utilisateur réel
+                        Text("YO") // TODO: initials utilisateur réelles
                             .foregroundColor(GreenAccent)
                             .font(.system(size: 16, weight: .bold))
                     )
@@ -136,7 +145,6 @@ struct AddPublicationView: View {
                 Text("Your Name") // TODO: nom réel
                     .foregroundColor(TextPrimary)
                     .font(.system(size: 16, weight: .bold))
-
                 Text("Public post")
                     .foregroundColor(TextSecondary)
                     .font(.system(size: 13))
@@ -151,7 +159,6 @@ struct AddPublicationView: View {
         ZStack(alignment: .topLeading) {
             RoundedRectangle(cornerRadius: 20)
                 .fill(CardBackground.opacity(0.6))
-
             VStack {
                 TextEditor(text: $viewModel.content)
                     .foregroundColor(TextPrimary)
@@ -237,49 +244,26 @@ struct AddPublicationView: View {
 
     private var actionsRow: some View {
         HStack(spacing: 12) {
-            PhotosPicker(
-                selection: $selectedPhotoItem,
-                matching: .images
-            ) {
-                AddActionButton(
-                    systemImage: "photo",
-                    label: "Photo",
-                    color: Color(red: 0x3B/255, green: 0x82/255, blue: 0xF6/255)
-                )
+            PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                AddActionButton(systemImage: "photo", label: "Photo",
+                                color: Color(red: 0x3B/255, green: 0x82/255, blue: 0xF6/255))
             }
-
             Button { showTagSheet = true } label: {
-                AddActionButton(
-                    systemImage: "tag",
-                    label: "Tag",
-                    color: Color(red: 0xF5/255, green: 0x9E/255, blue: 0x0B/255)
-                )
+                AddActionButton(systemImage: "tag", label: "Tag",
+                                color: Color(red: 0xF5/255, green: 0x9E/255, blue: 0x0B/255))
             }
-
-            // TODO: mentions / location plus tard si besoin
-            AddActionButton(
-                systemImage: "at",
-                label: "Mention",
-                color: GreenAccent
-            )
-
-            AddActionButton(
-                systemImage: "location",
-                label: "Location",
-                color: RedAccent
-            )
+            AddActionButton(systemImage: "at", label: "Mention", color: GreenAccent)
+            AddActionButton(systemImage: "location", label: "Location", color: RedAccent)
         }
     }
 
     private var publishButton: some View {
         let canPost = !viewModel.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-
         return Button {
             viewModel.publishPublication()
         } label: {
             HStack {
-                Image(systemName: "paperplane.fill")
-                    .foregroundColor(.white)
+                Image(systemName: "paperplane.fill").foregroundColor(.white)
                 Text("Publish on Feed")
                     .foregroundColor(.white)
                     .font(.system(size: 16, weight: .bold))
@@ -288,11 +272,7 @@ struct AddPublicationView: View {
             .padding(.vertical, 14)
         }
         .disabled(!canPost || isLoading)
-        .background(
-            (!canPost || isLoading)
-            ? GreenAccent.opacity(0.3)
-            : GreenAccent
-        )
+        .background((!canPost || isLoading) ? GreenAccent.opacity(0.3) : GreenAccent)
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.5), radius: 8, x: 0, y: 4)
         .padding(.top, 24)
@@ -308,7 +288,6 @@ struct AddPublicationView: View {
             Image(systemName: "lightbulb")
                 .foregroundColor(Color(red: 0xFB/255, green: 0xBF/255, blue: 0x24/255))
                 .font(.system(size: 20))
-
             VStack(alignment: .leading, spacing: 4) {
                 Text("Pro Tips")
                     .foregroundColor(TextPrimary)
@@ -330,7 +309,7 @@ struct AddPublicationView: View {
     }
 }
 
-// MARK: - Composants réutilisables
+// MARK: - Reusable components
 
 struct AddActionButton: View {
     let systemImage: String
@@ -395,10 +374,12 @@ struct TagSelectionSheet: View {
                     Button("Done") { onDone(selectedTags) }
                 }
             }
-            .onAppear {
-                selectedTags = initialTags
-            }
+            .onAppear { selectedTags = initialTags }
         }
     }
 }
 
+#Preview {
+    AddPublicationView()
+        .preferredColorScheme(.dark)
+}

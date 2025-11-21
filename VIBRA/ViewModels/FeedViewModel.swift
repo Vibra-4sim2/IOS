@@ -80,7 +80,7 @@ final class FeedViewModel: ObservableObject {
                     return pub
                 }
             case .failure:
-                // Tu peux gérer une erreur (toast, log, etc.)
+                // Tu peux loguer ou afficher une erreur si tu veux
                 break
             }
         }
