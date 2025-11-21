@@ -40,7 +40,14 @@ struct TabBarView: View {
                                 Text("Map")
                             }
 
-                        Text("Community View")
+                        FeedView(
+                                onCreatePost: {
+                                    // TODO: navigation vers l’écran d’ajout de publication
+                                },
+                                onOpenPost: { publication in
+                                    // TODO: navigation vers détails / commentaires
+                                }
+                            )
                             .tabItem {
                                 Image(systemName: "person.2.fill")
                                 Text("Community")
