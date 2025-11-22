@@ -5,7 +5,7 @@
 //
 
 import Foundation
-
+/*
 struct Participation: Codable, Identifiable {
     let id: String?
     let userId: String?
@@ -41,7 +41,7 @@ enum ParticipationError: Error, CustomStringConvertible {
         }
     }
 }
-
+*/
 final class ParticipationService {
     static let shared = ParticipationService()
     private init() {}

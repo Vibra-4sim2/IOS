@@ -15,7 +15,6 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
-				ViewModels/Untitled.swift,
 			);
 			target = FD03B3B92EBCAAFB000C804D /* VIBRA */;
 		};
