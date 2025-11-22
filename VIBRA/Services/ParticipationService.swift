@@ -1,54 +1,14 @@
-//  ParticipationService.swift
-//  VIBRA
-//
-//  Created to handle user participation in a sortie.
-//
-
 import Foundation
-/*
-struct Participation: Codable, Identifiable {
-    let id: String?
-    let userId: String?
-    let sortieId: String?
-    let status: String?
-    let createdAt: String?
-    let updatedAt: String?
 
-    enum CodingKeys: String, CodingKey {
-        case id = "_id"
-        case userId
-        case sortieId
-        case status
-        case createdAt
-        case updatedAt
-    }
-}
-
-enum ParticipationError: Error, CustomStringConvertible {
-    case badURL
-    case noToken
-    case invalidResponse(Int, String)
-    case decoding(Error)
-    case network(Error)
-
-    var description: String {
-        switch self {
-        case .badURL: return "URL invalide"
-        case .noToken: return "Token manquant"
-        case .invalidResponse(let code, let body): return "Réponse serveur invalide (code: \(code)) body: \(body)"
-        case .decoding(let e): return "Erreur de décodage: \(e.localizedDescription)"
-        case .network(let e): return "Erreur réseau: \(e.localizedDescription)"
-        }
-    }
-}
-*/
 final class ParticipationService {
     static let shared = ParticipationService()
     private init() {}
 
     private var baseURL: String { Constants.baseURL }
 
-    // Créer une participation. Le backend peut inférer userId via le JWT; on envoie aussi userId si accepté.
+    // MARK: - Création de participation
+
+    /// Créer une participation EN_ATTENTE pour une sortie
     func createParticipation(userId: String, sortieId: String) async throws -> Participation {
         let urlString = "\(baseURL)/participations"
         guard let url = URL(string: urlString) else { throw ParticipationError.badURL }
@@ -58,46 +18,92 @@ final class ParticipationService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        // Récupération token
         guard let token = try? KeychainManager.shared.getJWT() else { throw ParticipationError.noToken }
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
-        // Corps: envoyer sortieId (et userId si backend le tolère)
         let body: [String: Any] = [
             "sortieId": sortieId,
-            "userId": userId, // Optionnel côté backend si il lit le JWT
+            "userId": userId,
             "status": "EN_ATTENTE"
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
 
-        do {
-            let (data, response) = try await URLSession.shared.data(for: request)
-            guard let http = response as? HTTPURLResponse else { throw ParticipationError.invalidResponse(-1, "no http response") }
-            let bodyString = String(data: data, encoding: .utf8) ?? "<no body>"
-            guard (200...299).contains(http.statusCode) else {
-                throw ParticipationError.invalidResponse(http.statusCode, bodyString)
-            }
-            do {
-                return try JSONDecoder().decode(Participation.self, from: data)
-            } catch {
-                throw ParticipationError.decoding(error)
-            }
-        } catch {
-            throw ParticipationError.network(error)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw ParticipationError.invalidResponse(-1, "no http response")
         }
+
+        let bodyString = String(data: data, encoding: .utf8) ?? "<no body>"
+        print("🛰 createParticipation HTTP \(http.statusCode)")
+        print("🧪 RAW JSON:", bodyString)
+
+        guard (200...299).contains(http.statusCode) else {
+            throw ParticipationError.invalidResponse(http.statusCode, bodyString)
+        }
+
+        // NE PAS décoder ici, la forme ne correspond pas au modèle Participation
+        // On construit une Participation minimale à partir des infos qu'on connaît.
+        let user = ParticipationUser(id: userId, email: nil)
+        let sortie = ParticipationSortie(id: sortieId, titre: nil, description: nil, createurId: nil)
+        let participation = Participation(
+            id: nil,
+            user: user,
+            sortie: sortie,
+            status: "EN_ATTENTE",
+            createdAt: nil,
+            updatedAt: nil
+        )
+        return participation
     }
 
-    // (Optionnel) Récupérer les participations pour une sortie
+    // MARK: - Liste des participations d'une sortie
+
+    /// GET /participations?sortieId=...
     func listParticipations(sortieId: String) async throws -> [Participation] {
-        guard let url = URL(string: "\(baseURL)/participations/sortie/\(sortieId)") else { throw ParticipationError.badURL }
+        guard var components = URLComponents(string: "\(baseURL)/participations") else {
+            throw ParticipationError.badURL
+        }
+        components.queryItems = [
+            URLQueryItem(name: "sortieId", value: sortieId)
+        ]
+        guard let url = components.url else {
+            throw ParticipationError.badURL
+        }
+
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let token = try? KeychainManager.shared.getJWT() { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+
+        if let token = try? KeychainManager.shared.getJWT() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw ParticipationError.invalidResponse(-1, "no http response") }
+        guard let http = response as? HTTPURLResponse else {
+            throw ParticipationError.invalidResponse(-1, "no http response")
+        }
+
         let bodyString = String(data: data, encoding: .utf8) ?? "<no body>"
-        guard (200...299).contains(http.statusCode) else { throw ParticipationError.invalidResponse(http.statusCode, bodyString) }
-        do { return try JSONDecoder().decode([Participation].self, from: data) } catch { throw ParticipationError.decoding(error) }
+        print("🛰 listParticipations(\(sortieId)) HTTP \(http.statusCode)")
+        print("🧪 RAW JSON:", bodyString.prefix(500), "…")
+
+        if http.statusCode == 304 {
+            print("ℹ️ 304 Not Modified → retour []")
+            return []
+        }
+
+        guard (200...299).contains(http.statusCode) else {
+            throw ParticipationError.invalidResponse(http.statusCode, bodyString)
+        }
+
+        do {
+            let participations = try JSONDecoder().decode([Participation].self, from: data)
+            print("✅ \(participations.count) participations décodées pour sortieId \(sortieId)")
+            return participations
+        } catch {
+            print("❌ listParticipations decoding error:", error)
+            throw ParticipationError.decoding(error)
+        }
     }
 }

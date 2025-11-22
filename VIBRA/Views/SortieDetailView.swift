@@ -55,7 +55,7 @@ struct SortieDetailView: View {
 
                         Divider().background(AppColors.DividerColor)
 
-                        // NEW: section participants
+                        // Section participants
                         participantsSection
                     }
                     .padding()
@@ -80,6 +80,7 @@ struct SortieDetailView: View {
             if !isPreview {
                 await vm.loadRoute()
                 await vm.loadWeather()
+                await vm.loadParticipations() // IMPORTANT: charge les participations pour gérer "Déjà inscrit" + membres ACCEPTÉE
             }
         }
     }
@@ -346,7 +347,7 @@ struct SortieDetailView: View {
         }
     }
 
-    // MARK: - Participants Section (NEW)
+    // MARK: - Participants Section
     private var participantsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -463,7 +464,7 @@ struct SortieDetailView: View {
     }
 }
 
-// MARK: - Participant Row (NEW)
+// MARK: - Participant Row
 private struct ParticipantRow: View {
     let user: User
 

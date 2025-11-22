@@ -32,9 +32,13 @@ final class SortieDetailViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var routeDistanceMeters: Double?
 
-    // Participants state
+    // Participants state (affichage des membres)
     @Published var participants: [User] = []
     @Published var participantIds: [String] = []
+
+    // Participations brutes (EN_ATTENTE / ACCEPTEE / REFUSEE…)
+    @Published var participations: [Participation] = []
+
     @Published var isParticipating = false
     @Published var participationMessage: String?
 
@@ -48,6 +52,18 @@ final class SortieDetailViewModel: ObservableObject {
 
     let ride: Ride
     let creator: User?
+
+    // MARK: - Init
+
+    init(ride: Ride, creator: User?) {
+        self.ride = ride
+        self.creator = creator
+        // Initialise depuis la sortie si déjà fournie
+        if let users = ride.participants { self.participants = users }
+        if let ids = ride.participantIds { self.participantIds = ids }
+    }
+
+    // MARK: - Helpers
 
     var creatorFullName: String {
         if let c = creator { return "\(c.firstName) \(c.lastName)".trimmingCharacters(in: .whitespaces) }
@@ -86,14 +102,6 @@ final class SortieDetailViewModel: ObservableObject {
         return nil
     }
 
-    init(ride: Ride, creator: User?) {
-        self.ride = ride
-        self.creator = creator
-        // Initialize participants from ride payload if present
-        if let users = ride.participants { self.participants = users }
-        if let ids = ride.participantIds { self.participantIds = ids }
-    }
-
     // MARK: - Route
 
     func loadRoute(profileOverride: String? = nil) async {
@@ -103,9 +111,13 @@ final class SortieDetailViewModel: ObservableObject {
         isLoading = true
         defer { isLoading = false }
 
-        let profile = profileOverride ?? profileFromType(ride.type)
+        let profile = profileFromType(ride.type)
         do {
-            let (coords, distance) = try await RouteFetcher.fetchRouteCoordinates(from: start, to: end, profile: profile)
+            let (coords, distance) = try await RouteFetcher.fetchRouteCoordinates(
+                from: start,
+                to: end,
+                profile: profileOverride ?? profile
+            )
             routeCoordinates = coords
             routeDistanceMeters = distance
         } catch {
@@ -137,15 +149,9 @@ final class SortieDetailViewModel: ObservableObject {
         weatherTemperatureText = nil
         weatherWindText = nil
 
-        guard let start = startCoordinate else {
-            // pas de point de départ -> pas de météo
-            return
-        }
-        guard let dateString = ride.date else {
-            return
-        }
+        guard let start = startCoordinate else { return }
+        guard let dateString = ride.date else { return }
 
-        // On récupère uniquement la date (YYYY-MM-DD) pour interroger l'API daily
         guard let dateOnlyString = Self.isoStringToDateOnly(dateString) else {
             weatherErrorMessage = "Date invalide pour la météo"
             return
@@ -194,8 +200,6 @@ final class SortieDetailViewModel: ObservableObject {
     }
 
     private func fetchWeather(latitude: Double, longitude: Double, date: String) async throws -> WeatherResponse {
-        // API Open-Meteo : météo journalière pour une date donnée
-        // https://api.open-meteo.com/v1/forecast?latitude=...&longitude=...&daily=weathercode,temperature_2m_max,temperature_2m_min,windspeed_10m_max&timezone=auto&start_date=YYYY-MM-DD&end_date=YYYY-MM-DD
         var components = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
         components.queryItems = [
             URLQueryItem(name: "latitude", value: String(latitude)),
@@ -230,75 +234,43 @@ final class SortieDetailViewModel: ObservableObject {
     }
 
     private func iconName(for weatherCode: Int) -> String {
-        // Mapping simplifié du code météo Open-Meteo vers SF Symbol
         switch weatherCode {
-        case 0:
-            return "sun.max.fill" // ciel clair
-        case 1, 2:
-            return "cloud.sun.fill" // principalement ensoleillé
-        case 3:
-            return "cloud.fill" // couvert
-        case 45, 48:
-            return "cloud.fog.fill" // brouillard
-        case 51, 53, 55, 56, 57:
-            return "cloud.drizzle.fill" // bruine
-        case 61, 63, 65, 80, 81, 82:
-            return "cloud.rain.fill" // pluie
-        case 71, 73, 75, 77, 85, 86:
-            return "cloud.snow.fill" // neige
-        case 95, 96, 99:
-            return "cloud.bolt.rain.fill" // orage
-        default:
-            return "cloud"
+        case 0: return "sun.max.fill"
+        case 1, 2: return "cloud.sun.fill"
+        case 3: return "cloud.fill"
+        case 45, 48: return "cloud.fog.fill"
+        case 51, 53, 55, 56, 57: return "cloud.drizzle.fill"
+        case 61, 63, 65, 80, 81, 82: return "cloud.rain.fill"
+        case 71, 73, 75, 77, 85, 86: return "cloud.snow.fill"
+        case 95, 96, 99: return "cloud.bolt.rain.fill"
+        default: return "cloud"
         }
     }
 
     private func description(for weatherCode: Int) -> String {
         switch weatherCode {
-        case 0:
-            return "Ciel dégagé"
-        case 1:
-            return "Principalement dégagé"
-        case 2:
-            return "Partiellement nuageux"
-        case 3:
-            return "Couvert"
-        case 45, 48:
-            return "Brouillard"
-        case 51, 53, 55:
-            return "Bruine"
-        case 56, 57:
-            return "Bruine verglaçante"
-        case 61:
-            return "Pluie faible"
-        case 63:
-            return "Pluie modérée"
-        case 65:
-            return "Pluie forte"
-        case 71:
-            return "Chute de neige faible"
-        case 73:
-            return "Chute de neige modérée"
-        case 75:
-            return "Chute de neige forte"
-        case 77:
-            return "Grains de neige"
-        case 80:
-            return "Averses faibles"
-        case 81:
-            return "Averses modérées"
-        case 82:
-            return "Fortes averses"
-        case 85:
-            return "Averses de neige faibles"
-        case 86:
-            return "Averses de neige fortes"
-        case 95:
-            return "Orages"
-        case 96, 99:
-            return "Orages avec grêle"
-        default:
-            return "Conditions inconnues"
+        case 0: return "Ciel dégagé"
+        case 1: return "Principalement dégagé"
+        case 2: return "Partiellement nuageux"
+        case 3: return "Couvert"
+        case 45, 48: return "Brouillard"
+        case 51, 53, 55: return "Bruine"
+        case 56, 57: return "Bruine verglaçante"
+        case 61: return "Pluie faible"
+        case 63: return "Pluie modérée"
+        case 65: return "Pluie forte"
+        case 71: return "Chute de neige faible"
+        case 73: return "Chute de neige modérée"
+        case 75: return "Chute de neige forte"
+        case 77: return "Grains de neige"
+        case 80: return "Averses faibles"
+        case 81: return "Averses modérées"
+        case 82: return "Fortes averses"
+        case 85: return "Averses de neige faibles"
+        case 86: return "Averses de neige fortes"
+        case 95: return "Orages"
+        case 96, 99: return "Orages avec grêle"
+        default: return "Conditions inconnues"
         }
     }
 
@@ -309,31 +281,81 @@ final class SortieDetailViewModel: ObservableObject {
         return token.getUserIdFromJWT()
     }
 
+    /// Vrai si une participation existe déjà pour (sortieId, userId) dans `participations`
     var alreadyParticipating: Bool {
-        guard let uid = currentUserId() else { return false }
+        guard let uid = currentUserId(), let sortieId = ride.id else { return false }
+
+        // check sur les participations renvoyées par l'API
+        if participations.contains(where: { $0.user?.id == uid && $0.sortie?.id == sortieId }) {
+            return true
+        }
+        // fallback sur les anciens champs du ride (si déjà peuplés)
         if participants.contains(where: { $0.id == uid }) { return true }
         if participantIds.contains(where: { $0 == uid }) { return true }
         return false
     }
 
+    /// Charge les participations pour cette sortie, et ne garde que les ACCEPTÉE dans les membres
+    func loadParticipations() async {
+        guard let sortieId = ride.id else { return }
+        do {
+            let list = try await ParticipationService.shared.listParticipations(sortieId: sortieId)
+            self.participations = list
+
+            // Garder uniquement les participations ACCEPTÉE pour la liste des membres
+            let accepted = list.filter { $0.status == "ACCEPTEE" }
+            self.participantIds = accepted.compactMap { $0.user?.id }
+
+            // Charger les User complets pour affichage
+            var users: [User] = []
+            for uid in self.participantIds {
+                do {
+                    let u = try await AuthService.shared.getUser(byId: uid)
+                    users.append(u)
+                } catch {
+                    print("❌ SortieDetailViewModel.loadParticipations: impossible de charger le user \(uid): \(error)")
+                }
+            }
+            self.participants = users
+
+            print("✅ loadParticipations: \(list.count) participations, \(accepted.count) ACCEPTÉE")
+        } catch {
+            print("❌ loadParticipations error:", error)
+        }
+    }
+
     func participate() async {
-        guard let sortieId = ride.id else { participationMessage = "Sortie inconnue"; return }
-        guard let uid = currentUserId() else { participationMessage = "Veuillez vous reconnecter"; return }
-        if alreadyParticipating { participationMessage = "Vous participez déjà"; return }
+        guard let sortieId = ride.id else {
+            participationMessage = "Sortie inconnue"
+            return
+        }
+        guard let uid = currentUserId() else {
+            participationMessage = "Veuillez vous reconnecter"
+            return
+        }
+        if alreadyParticipating {
+            participationMessage = "Vous participez déjà"
+            return
+        }
 
         isParticipating = true
         participationMessage = nil
         defer { isParticipating = false }
+
         do {
-            _ = try await ParticipationService.shared.createParticipation(userId: uid, sortieId: sortieId)
-            // Update local state: append id and fetch user for richer display
-            if !participantIds.contains(uid) { participantIds.append(uid) }
-            let user = try await AuthService.shared.getUser(byId: uid)
-            if !participants.contains(where: { $0.id == user.id }) {
-                participants.append(user)
-            }
+            print("🟢 participate(): création de participation pour user=\(uid) sortie=\(sortieId)")
+            let created = try await ParticipationService.shared.createParticipation(userId: uid, sortieId: sortieId)
+            print("✅ participate(): participation créée avec id=\(created.id ?? "<nil>") status=\(created.status ?? "<nil>")")
+
+            // Succès garanti côté backend -> on met directement le message positif
             participationMessage = "Participation enregistrée"
+
+            // Recharge en arrière-plan sans casser le message si ça plante
+            Task {
+                await self.loadParticipations()
+            }
         } catch {
+            print("❌ participate() error:", error)
             participationMessage = "Échec de la participation: \(error.localizedDescription)"
         }
     }

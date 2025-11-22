@@ -1,9 +1,3 @@
-//
-//  MyRidesViewModel.swift
-//  VIBRA
-//
-//  Created by mac book pro on 11/22/25.
-//
 import Foundation
 import Combine
 
@@ -15,43 +9,52 @@ final class MyRidesViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var currentUserId: String?
 
+    /// participations en attente par sortieId (clé = id de Ride)
+    @Published var pendingParticipationsByRideId: [String: [Participation]] = [:]
+
     @Published var searchText: String = "" {
         didSet {
             applyMyRidesFilter()
         }
     }
 
-    init() {
-        Task {
-            await load()
-        }
+    /// Nombre total de participations en attente (pour badge global)
+    var totalPendingCount: Int {
+        pendingParticipationsByRideId.values.reduce(0) { $0 + $1.count }
     }
 
-    /// Charge les sorties + récupère l'ID utilisateur connecté depuis le JWT et applique le filtre "mes sorties".
+    init() {
+        Task { await load() }
+    }
+
+    // MARK: - Chargement global (sorties + participations)
     func load() async {
         isLoading = true
         errorMessage = nil
 
         do {
-            // 1) Récupérer l'utilisateur courant via le JWT
             try await loadCurrentUserIdFromJWT()
-
-            // 2) Récupérer toutes les sorties avec créateur
             let fetched = try await HomeService.shared.fetchRidesWithCreators()
             self.allItems = fetched
-
-            // 3) Appliquer le filtre "mes sorties"
             applyMyRidesFilter()
+            await loadPendingParticipationsForMyRides()
         } catch {
             self.errorMessage = "Erreur de chargement: \(error.localizedDescription)"
             self.allItems = []
             self.myItems = []
+            self.pendingParticipationsByRideId = [:]
         }
 
         isLoading = false
     }
 
-    /// Essaie d'extraire l'ID utilisateur depuis le JWT stocké dans le Keychain
+    /// Recharge uniquement les participations (ex: pull-to-refresh, badge)
+    func reloadParticipations() async {
+        await loadPendingParticipationsForMyRides()
+    }
+
+    // MARK: - JWT / User
+
     private func loadCurrentUserIdFromJWT() async throws {
         do {
             let token = try KeychainManager.shared.getJWT()
@@ -61,51 +64,39 @@ final class MyRidesViewModel: ObservableObject {
                 self.currentUserId = nil
             }
         } catch {
-            // Pas de token ou erreur Keychain => utilisateur non connecté
             self.currentUserId = nil
         }
     }
 
-    /// Décodage minimal d'un JWT pour en extraire un champ "id" / "userId" / "sub"
-    /// ⚠️ Adapte ici la clé selon ton backend.
     private func decodeUserId(fromJWT token: String) -> String? {
-        // Format JWT: header.payload.signature
         let segments = token.split(separator: ".")
         guard segments.count >= 2 else { return nil }
 
         let payloadSegment = segments[1]
 
-        // Base64URL -> Base64
         var base64 = String(payloadSegment)
             .replacingOccurrences(of: "-", with: "+")
             .replacingOccurrences(of: "_", with: "/")
 
-        // Ajouter le padding si nécessaire
         while base64.count % 4 != 0 {
             base64.append("=")
         }
 
         guard let payloadData = Data(base64Encoded: base64) else { return nil }
-
         guard let json = try? JSONSerialization.jsonObject(with: payloadData, options: []) as? [String: Any] else {
             return nil
         }
 
-        // ➜ ADAPTER ICI suivant ton backend
-        if let id = json["id"] as? String {
-            return id
-        }
-        if let userId = json["userId"] as? String {
-            return userId
-        }
-        if let sub = json["sub"] as? String {
-            return sub
-        }
+        if let id = json["id"] as? String { return id }
+        if let userId = json["userId"] as? String { return userId }
+        if let sub = json["sub"] as? String { return sub }
+        if let mongoId = json["_id"] as? String { return mongoId }
 
         return nil
     }
 
-    /// Applique le filtre "mes sorties" sur allItems en fonction de currentUserId + searchText
+    // MARK: - Filtres
+
     func applyMyRidesFilter() {
         guard let currentUserId = currentUserId else {
             myItems = []
@@ -131,5 +122,46 @@ final class MyRidesViewModel: ObservableObject {
         }
 
         self.myItems = result
+    }
+
+    // MARK: - Participations
+
+    /// Charge les participations EN_ATTENTE pour chacune de mes sorties
+    private func loadPendingParticipationsForMyRides() async {
+        guard !myItems.isEmpty else {
+            pendingParticipationsByRideId = [:]
+            return
+        }
+
+        var tmpDict: [String: [Participation]] = [:]
+
+        await withTaskGroup(of: (String, [Participation]).self) { group in
+            for item in myItems {
+                guard let rideId = item.ride.id else { continue }
+
+                group.addTask {
+                    do {
+                        let participations = try await ParticipationService.shared.listParticipations(sortieId: rideId)
+                        let pending = participations.filter { $0.status == "EN_ATTENTE" }
+                        return (rideId, pending)
+                    } catch {
+                        print("❌ MyRidesViewModel: Failed to load participations for sortie \(rideId) - \(error)")
+                        return (rideId, [])
+                    }
+                }
+            }
+
+            for await (rideId, pending) in group {
+                tmpDict[rideId] = pending
+            }
+        }
+
+        self.pendingParticipationsByRideId = tmpDict
+        print("📊 pendingParticipationsByRideId:", pendingParticipationsByRideId.keys)
+    }
+
+    func pendingParticipations(for rideId: String?) -> [Participation] {
+        guard let id = rideId else { return [] }
+        return pendingParticipationsByRideId[id] ?? []
     }
 }
