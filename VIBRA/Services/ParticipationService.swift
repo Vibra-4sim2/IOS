@@ -42,7 +42,6 @@ final class ParticipationService {
         }
 
         // NE PAS décoder ici, la forme ne correspond pas au modèle Participation
-        // On construit une Participation minimale à partir des infos qu'on connaît.
         let user = ParticipationUser(id: userId, email: nil)
         let sortie = ParticipationSortie(id: sortieId, titre: nil, description: nil, createurId: nil)
         let participation = Participation(
@@ -105,5 +104,42 @@ final class ParticipationService {
             print("❌ listParticipations decoding error:", error)
             throw ParticipationError.decoding(error)
         }
+    }
+
+    // MARK: - Mise à jour du statut
+
+    /// PATCH /participations/{id}/status  body: { "status": "ACCEPTEE" | "EN_ATTENTE" | "REFUSEE" }
+    func updateParticipationStatus(id: String, status: String) async throws {
+        let urlString = "\(baseURL)/participations/\(id)/status"
+        guard let url = URL(string: urlString) else { throw ParticipationError.badURL }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        guard let token = try? KeychainManager.shared.getJWT() else { throw ParticipationError.noToken }
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let body: [String: Any] = [
+            "status": status
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw ParticipationError.invalidResponse(-1, "no http response")
+        }
+
+        let bodyString = String(data: data, encoding: .utf8) ?? "<no body>"
+        print("🛰 updateParticipationStatus(\(id)) HTTP \(http.statusCode)")
+        print("🧪 RAW JSON:", bodyString.prefix(500), "…")
+
+        guard (200...299).contains(http.statusCode) else {
+            throw ParticipationError.invalidResponse(http.statusCode, bodyString)
+        }
+
+        // NE PAS décoder ici : la réponse renvoie userId/sortieId en string, pas en objet.
+        // On se contente de savoir que la MAJ a réussi (200).
     }
 }

@@ -81,30 +81,30 @@ struct MyRidesHomeView: View {
                                         if let rideId = item.ride.id {
                                             let pending = viewModel.pendingParticipations(for: rideId)
                                             if !pending.isEmpty {
-                                                pendingSection(pending, for: item.ride)
+                                                pendingSection(pending, rideId: rideId, for: item.ride)
                                             }
                                         }
                                     }
                                 }
-                            }
 
-                            // DEBUG: voir les clés chargées
-                            if !viewModel.pendingParticipationsByRideId.isEmpty {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("DEBUG Participations en mémoire :")
-                                        .font(.caption.weight(.bold))
-                                        .foregroundColor(.yellow)
-
-                                    ForEach(Array(viewModel.pendingParticipationsByRideId.keys), id: \.self) { key in
-                                        let arr = viewModel.pendingParticipationsByRideId[key] ?? []
-                                        Text("• sortieId \(key): \(arr.count) participation(s)")
-                                            .font(.caption2)
+                                // DEBUG : afficher les clés
+                                if !viewModel.pendingParticipationsByRideId.isEmpty {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("DEBUG Participations en mémoire :")
+                                            .font(.caption.weight(.bold))
                                             .foregroundColor(.yellow)
+
+                                        ForEach(Array(viewModel.pendingParticipationsByRideId.keys), id: \.self) { key in
+                                            let arr = viewModel.pendingParticipationsByRideId[key] ?? []
+                                            Text("• sortieId \(key): \(arr.count) participation(s)")
+                                                .font(.caption2)
+                                                .foregroundColor(.yellow)
+                                        }
                                     }
+                                    .padding()
+                                    .background(Color.black.opacity(0.6))
+                                    .cornerRadius(8)
                                 }
-                                .padding()
-                                .background(Color.black.opacity(0.6))
-                                .cornerRadius(8)
                             }
                         }
                         .padding(.horizontal)
@@ -179,7 +179,7 @@ struct MyRidesHomeView: View {
     // MARK: - Section participations
 
     @ViewBuilder
-    private func pendingSection(_ participations: [Participation], for ride: Ride) -> some View {
+    private func pendingSection(_ participations: [Participation], rideId: String, for ride: Ride) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Image(systemName: "person.3.fill")
@@ -208,12 +208,21 @@ struct MyRidesHomeView: View {
                         }
                     }
                     Spacer()
-                    Text(p.status ?? "EN_ATTENTE")
-                        .font(.caption2)
-                        .padding(6)
-                        .background(AppColors.CardGlass)
-                        .cornerRadius(8)
-                        .foregroundColor(AppColors.TextSecondary)
+
+                    // BOUTON ACCEPTER
+                    Button {
+                        Task {
+                            await viewModel.acceptParticipation(p, forRideId: rideId)
+                        }
+                    } label: {
+                        Text("Accepter")
+                            .font(.caption2.bold())
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(AppColors.GreenAccent)
+                            .foregroundColor(.black)
+                            .cornerRadius(8)
+                    }
                 }
                 .padding(8)
                 .background(AppColors.CardDark.opacity(0.9))
@@ -232,7 +241,7 @@ struct MyRidesHomeView: View {
     // MARK: - Error / Empty / Not logged
 
     @ViewBuilder
-    private func errorStateView(error: String) -> some View {
+    private func errorStateView(error: String) -> some View { /* inchangé */
         VStack(spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.largeTitle)
@@ -266,7 +275,7 @@ struct MyRidesHomeView: View {
         .padding(.top, 40)
     }
 
-    private var notLoggedInState: some View {
+    private var notLoggedInState: some View { /* inchangé */
         VStack(spacing: 10) {
             Image(systemName: "person.crop.circle.badge.exclamationmark")
                 .font(.largeTitle)
@@ -288,7 +297,7 @@ struct MyRidesHomeView: View {
         .padding(.top, 40)
     }
 
-    private var emptyStateView: some View {
+    private var emptyStateView: some View { /* inchangé */
         VStack(spacing: 10) {
             Image(systemName: "tray.fill")
                 .font(.largeTitle)
