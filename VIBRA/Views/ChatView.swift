@@ -2,8 +2,6 @@
 //  ChatView.swift
 //  VIBRA
 //
-//  Interface de chat façon Messenger
-//
 
 import SwiftUI
 
@@ -22,6 +20,10 @@ struct ChatView: View {
             Divider().background(AppColors.DividerColor)
 
             contentArea
+
+            if vm.isSomeoneTyping {
+                typingIndicator
+            }
 
             inputBar
         }
@@ -49,12 +51,9 @@ struct ChatView: View {
 
             Spacer()
 
-            Button {
-                vm.reloadChatMessages()
-            } label: {
-                Image(systemName: "arrow.clockwise")
-                    .foregroundColor(AppColors.TextSecondary)
-            }
+            Circle()
+                .fill(vm.isWebSocketConnected ? AppColors.GreenAccent : AppColors.TextTertiary)
+                .frame(width: 10, height: 10)
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
@@ -64,7 +63,7 @@ struct ChatView: View {
 
     @ViewBuilder
     private var contentArea: some View {
-        if vm.isLoadingChat {
+        if vm.isLoadingChat && vm.messages.isEmpty {
             VStack(spacing: 8) {
                 ProgressView()
                     .progressViewStyle(.circular)
@@ -74,7 +73,7 @@ struct ChatView: View {
                     .foregroundColor(AppColors.TextSecondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let error = vm.chatErrorMessage {
+        } else if let error = vm.chatErrorMessage, vm.messages.isEmpty {
             VStack(spacing: 8) {
                 Text("Erreur")
                     .font(.headline)
@@ -111,12 +110,22 @@ struct ChatView: View {
                 .padding(.vertical, 8)
             }
             .onChange(of: vm.messages.count) { _ in
-                if let lastId = vm.messages.last?.id {
-                    withAnimation {
-                        proxy.scrollTo(lastId, anchor: .bottom)
-                    }
-                }
+                scrollToBottom(proxy: proxy, animated: true)
             }
+            .onAppear {
+                scrollToBottom(proxy: proxy, animated: false)
+            }
+        }
+    }
+    
+    private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
+        guard let lastId = vm.messages.last?.id else { return }
+        if animated {
+            withAnimation {
+                proxy.scrollTo(lastId, anchor: .bottom)
+            }
+        } else {
+            proxy.scrollTo(lastId, anchor: .bottom)
         }
     }
 
@@ -176,6 +185,19 @@ struct ChatView: View {
         f.locale = Locale(identifier: "fr_FR")
         f.dateFormat = "HH:mm"
         return f.string(from: date)
+    }
+
+    // MARK: - Typing indicator
+
+    private var typingIndicator: some View {
+        HStack {
+            Text("Quelqu'un est en train d'écrire…")
+                .font(.caption)
+                .foregroundColor(AppColors.TextSecondary)
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
     }
 
     // MARK: - Input bar

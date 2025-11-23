@@ -2,8 +2,6 @@
 //  ChatService.swift
 //  VIBRA
 //
-//  Service réseau pour les messages de chat
-//
 
 import Foundation
 
@@ -12,6 +10,9 @@ final class ChatService {
     private init() {}
 
     private var baseURL: String { Constants.baseURL }
+    
+    /// URL de base sous forme de `URL` (utilisée par SocketIOManager)
+    var baseURLAsURL: URL? { URL(string: baseURL) }
 
     // MARK: - Helpers
 
@@ -32,7 +33,7 @@ final class ChatService {
 
     // MARK: - Messages
 
-    /// GET /messages/sortie/{sortieId}
+    /// GET /messages/sortie/:sortieId
     func fetchMessages(sortieId: String) async throws -> [ChatMessage] {
         let urlString = "\(baseURL)/messages/sortie/\(sortieId)"
         guard let url = URL(string: urlString) else { throw ParticipationError.badURL }
@@ -51,7 +52,6 @@ final class ChatService {
             throw ParticipationError.invalidResponse(http.statusCode, bodyString)
         }
 
-        // Le backend renvoie { "messages": [ ... ] }
         struct MessagesResponse: Decodable {
             let messages: [ChatMessage]
         }
@@ -66,14 +66,13 @@ final class ChatService {
         }
     }
 
-    /// POST /messages/sortie/{sortieId}
-    /// Pour l’instant: envoi de texte uniquement (type = text)
+    /// POST /messages/sortie/:sortieId
     func sendTextMessage(sortieId: String, content: String) async throws -> ChatMessage {
         let urlString = "\(baseURL)/messages/sortie/\(sortieId)"
         guard let url = URL(string: urlString) else { throw ParticipationError.badURL }
 
         let body: [String: Any] = [
-            "type": "text",
+            "type": "TEXT",   // aligné avec MessageType.TEXT (backend)
             "content": content
         ]
 

@@ -2,18 +2,13 @@
 //  ChatsViewModel.swift
 //  VIBRA
 //
-//  Gère :
-//  - la liste des chats (sorties où je suis ACCEPTÉE)
-//  - le détail d'un chat (messages d'une sortie donnée)
-//
 
 import Foundation
 import SwiftUI
 import Combine
+
 @MainActor
 final class ChatsViewModel: ObservableObject {
-
-    // MARK: - Mode
 
     enum Mode {
         case list
@@ -22,19 +17,18 @@ final class ChatsViewModel: ObservableObject {
 
     let mode: Mode
 
-    // MARK: - Liste des chats (mode .list)
+    // MARK: - LISTE
 
     @Published var userId: String?
     @Published var isLoadingList: Bool = false
     @Published var listErrorMessage: String?
     @Published var participations: [Participation] = []
 
-    /// Participations ACCEPTÉE pour lesquelles on a une sortie
     var acceptedChats: [Participation] {
         participations.filter { $0.status == "ACCEPTEE" && $0.sortie?.id != nil }
     }
 
-    // MARK: - Détail d'un chat (mode .chat)
+    // MARK: - CHAT
 
     private(set) var chatSortieId: String?
     private(set) var chatSortieTitle: String?
@@ -43,8 +37,12 @@ final class ChatsViewModel: ObservableObject {
     @Published var isLoadingChat: Bool = false
     @Published var isSending: Bool = false
     @Published var chatErrorMessage: String?
+    
+    @Published var isWebSocketConnected: Bool = false
+    @Published var isSomeoneTyping: Bool = false
 
     private var currentUserId: String?
+    private var socketManager: SocketIOManager?
 
     // MARK: - Init
 
@@ -58,18 +56,19 @@ final class ChatsViewModel: ObservableObject {
             self.chatSortieId = sortieId
             self.chatSortieTitle = sortieTitle
             loadCurrentUserId()
-            Task { await loadChatMessages() }
+            Task { await loadChatMessages() }      // HTTP initial
+            setupSocket(forSortieId: sortieId)     // temps réel
         }
     }
-
-    // MARK: - Public helpers
+    
+    deinit {
+        socketManager?.disconnect()
+    }
 
     var navigationTitle: String {
         switch mode {
-        case .list:
-            return "Mes chats"
-        case .chat:
-            return chatSortieTitle ?? "Chat"
+        case .list: return "Mes chats"
+        case .chat: return chatSortieTitle ?? "Chat"
         }
     }
 
@@ -144,10 +143,66 @@ final class ChatsViewModel: ObservableObject {
 
         do {
             let sent = try await ChatService.shared.sendTextMessage(sortieId: sortieId, content: text)
-            messages.append(sent)
+            appendIncomingMessage(sent)
+            // En parallèle, ton backend va aussi émettre receiveMessage
+            // → appendIncomingMessage() évite les doublons grâce à l'id
         } catch {
             self.chatErrorMessage = "Échec de l'envoi: \(error.localizedDescription)"
         }
+    }
+    
+    // MARK: - Socket.IO
+    
+    private func setupSocket(forSortieId sortieId: String) {
+        guard let baseURL = ChatService.shared.baseURLAsURL else {
+            print("❌ ChatsViewModel: baseURL invalide")
+            return
+        }
+        
+        let manager = SocketIOManager(
+            baseURL: baseURL,
+            tokenProvider: { try KeychainManager.shared.getJWT() }
+        )
+        self.socketManager = manager
+        
+        manager.onEvent = { [weak self] event in
+            guard let self = self else { return }
+            print("🎯 [ChatsViewModel] event:", event)
+            
+            switch event {
+            case .connected:
+                self.isWebSocketConnected = true
+            case .disconnected:
+                self.isWebSocketConnected = false
+            case .reconnecting:
+                self.isWebSocketConnected = false
+            case .joinedRoom(let sId, let msgs):
+                guard sId == self.chatSortieId else { return }
+                // On remplace par les 50 derniers messages renvoyés par le WS
+                self.messages = msgs.sorted { ($0.createdDate ?? .distantPast) < ($1.createdDate ?? .distantPast) }
+            case .newMessage(let msg, let sId):
+                guard sId == self.chatSortieId else { return }
+                self.appendIncomingMessage(msg)
+            case .typing(_, let sId, let isTyping):
+                guard sId == self.chatSortieId else { return }
+                self.isSomeoneTyping = isTyping
+            case .messageRead:
+                break
+            case .onlineUsers:
+                break
+            case .error(let message):
+                self.chatErrorMessage = message
+            }
+        }
+        
+        manager.start(sortieId: sortieId)
+    }
+    
+    private func appendIncomingMessage(_ message: ChatMessage) {
+        if messages.contains(where: { $0.id == message.id }) {
+            return
+        }
+        messages.append(message)
     }
 
     // MARK: - JWT helpers
