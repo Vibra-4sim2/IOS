@@ -136,15 +136,19 @@ final class ChatsViewModel: ObservableObject {
     }
 
     private func sendTextAsync(_ text: String, sortieId: String) async {
+        // Envoi via WebSocket (Socket.IO)
+        // L'affichage du message se fait UNIQUEMENT lorsque le serveur
+        // renvoie l'évènement .newMessage, afin d'éviter les doublons
+        // et de garantir que le message est bien accepté par le backend.
+        guard let socketManager = socketManager else {
+            self.chatErrorMessage = "Connexion temps réel non initialisée"
+            return
+        }
+
         isSending = true
         defer { isSending = false }
 
-        do {
-            let sent = try await ChatService.shared.sendTextMessage(sortieId: sortieId, content: text)
-            appendIncomingMessage(sent)
-        } catch {
-            self.chatErrorMessage = "Échec de l'envoi: \(error.localizedDescription)"
-        }
+        socketManager.send(text: text)
     }
     
     // MARK: - Socket.IO

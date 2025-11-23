@@ -57,7 +57,6 @@ final class SocketIOManager {
             return
         }
         
-        // Important : baseURL SANS /chat, namespace géré plus bas
         let config: SocketIOClientConfiguration = [
             .log(true),
             .compress,
@@ -73,7 +72,6 @@ final class SocketIOManager {
         let manager = SocketManager(socketURL: baseURL, config: config)
         self.manager = manager
         
-        // Socket du namespace /chat (ton ChatGateway)
         let socket = manager.socket(forNamespace: "/chat")
         self.socket = socket
         
@@ -100,7 +98,7 @@ final class SocketIOManager {
         
         let payload: [String: Any] = [
             "sortieId": sortieId,
-            "type": "TEXT", // MessageType.TEXT côté backend
+            "type": "text", // MessageType.TEXT = 'text' côté backend
             "content": trimmed
         ]
         print("📤 [SocketIO] sendMessage payload:", payload)
@@ -128,7 +126,17 @@ final class SocketIOManager {
         socket?.emit("typing", payload)
     }
     
-    // MARK: - Handlers
+    func markAsRead(messageId: String) {
+        guard let sortieId = currentSortieId else { return }
+        let payload: [String: Any] = [
+            "sortieId": sortieId,
+            "messageId": messageId
+        ]
+        print("📤 [SocketIO] markAsRead payload:", payload)
+        socket?.emit("markAsRead", payload)
+    }
+    
+    // MARK: - Handlers de base
     
     private func setupBasicHandlers(socket: SocketIOClient) {
         socket.on(clientEvent: .connect) { [weak self] data, _ in
@@ -167,11 +175,12 @@ final class SocketIOManager {
             }
         }
         
-        socket.on("connected") { [weak self] data, _ in
+        socket.on("connected") { data, _ in
             print("✅ [SocketIO] event 'connected' data:", data)
-            // data contient { message, userId }
         }
     }
+    
+    // MARK: - Handlers métier (chat)
     
     private func setupChatHandlers(socket: SocketIOClient) {
         socket.on("joinedRoom") { [weak self] data, _ in
