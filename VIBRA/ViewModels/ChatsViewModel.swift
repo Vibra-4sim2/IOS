@@ -44,8 +44,6 @@ final class ChatsViewModel: ObservableObject {
     private var currentUserId: String?
     private var socketManager: SocketIOManager?
 
-    // MARK: - Init
-
     init(mode: Mode) {
         self.mode = mode
 
@@ -56,8 +54,8 @@ final class ChatsViewModel: ObservableObject {
             self.chatSortieId = sortieId
             self.chatSortieTitle = sortieTitle
             loadCurrentUserId()
-            Task { await loadChatMessages() }      // HTTP initial
-            setupSocket(forSortieId: sortieId)     // temps réel
+            Task { await loadChatMessages() }
+            setupSocket(forSortieId: sortieId)
         }
     }
     
@@ -144,8 +142,6 @@ final class ChatsViewModel: ObservableObject {
         do {
             let sent = try await ChatService.shared.sendTextMessage(sortieId: sortieId, content: text)
             appendIncomingMessage(sent)
-            // En parallèle, ton backend va aussi émettre receiveMessage
-            // → appendIncomingMessage() évite les doublons grâce à l'id
         } catch {
             self.chatErrorMessage = "Échec de l'envoi: \(error.localizedDescription)"
         }
@@ -178,7 +174,6 @@ final class ChatsViewModel: ObservableObject {
                 self.isWebSocketConnected = false
             case .joinedRoom(let sId, let msgs):
                 guard sId == self.chatSortieId else { return }
-                // On remplace par les 50 derniers messages renvoyés par le WS
                 self.messages = msgs.sorted { ($0.createdDate ?? .distantPast) < ($1.createdDate ?? .distantPast) }
             case .newMessage(let msg, let sId):
                 guard sId == self.chatSortieId else { return }

@@ -67,7 +67,7 @@ struct ChatsListView: View {
                 .padding(.top, 12)
             }
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar(.hidden, for: .navigationBar)
+            //.toolbar(.hidden, for: .navigationBar)
             .preferredColorScheme(.dark)
         }
     }

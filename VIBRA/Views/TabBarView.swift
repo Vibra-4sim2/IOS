@@ -2,7 +2,7 @@
 //  TabBarView.swift
 //  VIBRA
 //
-//  Version : barre corrigée + bouton central cohérent + bouton chat en haut
+//  Version : barre collée en bas + bouton central cohérent + bouton chat en haut
 //
 
 import SwiftUI
@@ -29,7 +29,7 @@ struct TabBarView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // MARK: - Background
+                // MARK: - Background global
                 LinearGradient(
                     gradient: Gradient(colors: [AppColors.BackgroundGradientStart, AppColors.BackgroundGradientEnd]),
                     startPoint: .topLeading,
@@ -37,33 +37,35 @@ struct TabBarView: View {
                 )
                 .ignoresSafeArea()
 
-                // MARK: - Main tab content
-                TabView(selection: $selectedTab) {
-                    HomeView()
-                        .tag(0)
-                        .ignoresSafeArea(edges: .bottom)
+                // MARK: - Contenu principal (TabView)
+                VStack(spacing: 0) {
+                    TabView(selection: $selectedTab) {
+                        HomeView()
+                            .tag(0)
 
-                    MapView()
-                        .tag(1)
-                        .ignoresSafeArea(edges: .bottom)
+                        MapView()
+                            .tag(1)
 
-                    FeedView(onCreatePost: {}, onOpenPost: { _ in })
-                        .tag(2)
-                        .ignoresSafeArea(edges: .bottom)
+                        FeedView(onCreatePost: {}, onOpenPost: { _ in })
+                            .tag(2)
 
-                    MyRidesHomeView()
-                        .tag(3)
-                        .ignoresSafeArea(edges: .bottom)
+                        MyRidesHomeView()
+                            .tag(3)
+                    }
+                    .tint(AppColors.GreenAccent)
                 }
-                .tint(AppColors.GreenAccent)
-                // on n’utilise plus un gros padding bas qui donnait l’effet "flottant"
-                //.padding(.bottom, 90)
 
                 // MARK: - Custom bottom tab bar + center button
                 VStack {
                     Spacer()
 
                     ZStack(alignment: .bottom) {
+                        // Fond plein qui colle en bas, sans espace
+                        Rectangle()
+                            .fill(AppColors.CardDark.opacity(0.98))
+                            .frame(height: 70 + bottomSafeAreaInset)
+                            .ignoresSafeArea(edges: .bottom)
+
                         // Barre de navigation inférieure
                         HStack {
                             // Côté gauche
@@ -90,7 +92,8 @@ struct TabBarView: View {
                         )
                         .shadow(color: AppColors.ShadowColor.opacity(0.8), radius: 10, x: 0, y: 6)
                         .padding(.horizontal, 14)
-                        .padding(.bottom, max(8, bottomSafeAreaInset)) // bien calée au bas
+                        // On la pose directement sur le safe area bas, sans marge supplémentaire
+                        .padding(.bottom, bottomSafeAreaInset == 0 ? 6 : bottomSafeAreaInset)
 
                         // Bouton central par-dessus la barre
                         Button(action: {
@@ -109,9 +112,8 @@ struct TabBarView: View {
                                     .foregroundColor(.black)
                             }
                         }
-                        .offset(y: -26) // remonte légèrement le bouton au-dessus de la barre
+                        .offset(y: -28) // flotte un peu au-dessus de la barre
                     }
-                    .ignoresSafeArea(edges: .bottom)
                 }
 
                 // MARK: - Top Bar (logo / menu / chat / profile)
@@ -304,8 +306,3 @@ struct MenuItemView: View {
         .preferredColorScheme(.dark)
 }
 
-// Preview demandé pour la liste des chats
-#Preview("Chats") {
-    ChatsListView()
-        .preferredColorScheme(.dark)
-}

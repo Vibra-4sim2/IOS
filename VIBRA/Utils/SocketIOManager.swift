@@ -57,7 +57,7 @@ final class SocketIOManager {
             return
         }
         
-        // ATTENTION : ici on passe la base (https://api...) SANS /chat
+        // Important : baseURL SANS /chat, namespace géré plus bas
         let config: SocketIOClientConfiguration = [
             .log(true),
             .compress,
@@ -69,11 +69,11 @@ final class SocketIOManager {
             .connectParams(["token": token])
         ]
         
-        print("🚀 [SocketIO] connect to base:", baseURL.absoluteString)
+        print("🚀 [SocketIO] connect base:", baseURL.absoluteString)
         let manager = SocketManager(socketURL: baseURL, config: config)
         self.manager = manager
         
-        // On récupère le socket du namespace /chat
+        // Socket du namespace /chat (ton ChatGateway)
         let socket = manager.socket(forNamespace: "/chat")
         self.socket = socket
         
@@ -100,7 +100,7 @@ final class SocketIOManager {
         
         let payload: [String: Any] = [
             "sortieId": sortieId,
-            "type": "TEXT",
+            "type": "TEXT", // MessageType.TEXT côté backend
             "content": trimmed
         ]
         print("📤 [SocketIO] sendMessage payload:", payload)
@@ -133,7 +133,7 @@ final class SocketIOManager {
     private func setupBasicHandlers(socket: SocketIOClient) {
         socket.on(clientEvent: .connect) { [weak self] data, _ in
             guard let self = self else { return }
-            print("✅ [SocketIO] clientEvent .connect (namespace: \(socket.nsp)) data:", data)
+            print("✅ [SocketIO] .connect (nsp: \(socket.nsp)) data:", data)
             DispatchQueue.main.async {
                 self.onEvent?(.connected)
             }
@@ -143,7 +143,7 @@ final class SocketIOManager {
         socket.on(clientEvent: .disconnect) { [weak self] data, _ in
             guard let self = self else { return }
             let reason = data.first as? String ?? "unknown"
-            print("🔴 [SocketIO] clientEvent .disconnect:", reason)
+            print("🔴 [SocketIO] .disconnect:", reason)
             DispatchQueue.main.async {
                 self.onEvent?(.disconnected(nil))
             }
@@ -152,7 +152,7 @@ final class SocketIOManager {
         socket.on(clientEvent: .reconnectAttempt) { [weak self] data, _ in
             guard let self = self else { return }
             let attempt = data.first as? Int ?? -1
-            print("🔁 [SocketIO] clientEvent .reconnectAttempt:", attempt)
+            print("🔁 [SocketIO] .reconnectAttempt:", attempt)
             DispatchQueue.main.async {
                 self.onEvent?(.reconnecting(attempt))
             }
@@ -160,7 +160,7 @@ final class SocketIOManager {
         
         socket.on(clientEvent: .error) { [weak self] data, _ in
             guard let self = self else { return }
-            print("❌ [SocketIO] clientEvent .error data:", data)
+            print("❌ [SocketIO] .error data:", data)
             let message = (data.first as? String) ?? "Socket.IO error"
             DispatchQueue.main.async {
                 self.onEvent?(.error(message))
@@ -169,7 +169,7 @@ final class SocketIOManager {
         
         socket.on("connected") { [weak self] data, _ in
             print("✅ [SocketIO] event 'connected' data:", data)
-            // optionnel: traiter userId
+            // data contient { message, userId }
         }
     }
     

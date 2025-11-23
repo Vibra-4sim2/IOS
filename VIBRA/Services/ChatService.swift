@@ -11,7 +11,6 @@ final class ChatService {
 
     private var baseURL: String { Constants.baseURL }
     
-    /// URL de base sous forme de `URL` (utilisée par SocketIOManager)
     var baseURLAsURL: URL? { URL(string: baseURL) }
 
     // MARK: - Helpers
@@ -33,7 +32,6 @@ final class ChatService {
 
     // MARK: - Messages
 
-    /// GET /messages/sortie/:sortieId
     func fetchMessages(sortieId: String) async throws -> [ChatMessage] {
         let urlString = "\(baseURL)/messages/sortie/\(sortieId)"
         guard let url = URL(string: urlString) else { throw ParticipationError.badURL }
@@ -66,13 +64,12 @@ final class ChatService {
         }
     }
 
-    /// POST /messages/sortie/:sortieId
     func sendTextMessage(sortieId: String, content: String) async throws -> ChatMessage {
         let urlString = "\(baseURL)/messages/sortie/\(sortieId)"
         guard let url = URL(string: urlString) else { throw ParticipationError.badURL }
 
         let body: [String: Any] = [
-            "type": "TEXT",   // aligné avec MessageType.TEXT (backend)
+            "type": "TEXT",   // aligné avec MessageType.TEXT
             "content": content
         ]
 

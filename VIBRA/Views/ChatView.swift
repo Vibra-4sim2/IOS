@@ -36,11 +36,9 @@ struct ChatView: View {
             .ignoresSafeArea()
         )
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .navigationBar)
+        //.toolbar(.hidden, for: .navigationBar)
         .preferredColorScheme(.dark)
     }
-
-    // MARK: - Header
 
     private var header: some View {
         HStack {
@@ -58,8 +56,6 @@ struct ChatView: View {
         .padding(.horizontal)
         .padding(.vertical, 8)
     }
-
-    // MARK: - Content
 
     @ViewBuilder
     private var contentArea: some View {
@@ -187,8 +183,6 @@ struct ChatView: View {
         return f.string(from: date)
     }
 
-    // MARK: - Typing indicator
-
     private var typingIndicator: some View {
         HStack {
             Text("Quelqu'un est en train d'écrire…")
@@ -199,8 +193,6 @@ struct ChatView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
     }
-
-    // MARK: - Input bar
 
     private var inputBar: some View {
         HStack(spacing: 8) {
