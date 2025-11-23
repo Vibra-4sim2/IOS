@@ -108,3 +108,21 @@ enum ParticipationError: Error, CustomStringConvertible {
         }
     }
 }
+// Modèle dédié pour ce endpoint: userId = String, sortieId = objet
+struct UserParticipationDTO: Codable {
+    let id: String?
+    let userId: String?
+    let sortieId: ParticipationSortie?
+    let status: String?
+    let createdAt: String?
+    let updatedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "_id"
+        case userId
+        case sortieId
+        case status
+        case createdAt
+        case updatedAt
+    }
+}

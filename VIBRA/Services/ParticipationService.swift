@@ -142,4 +142,58 @@ final class ParticipationService {
         // NE PAS décoder ici : la réponse renvoie userId/sortieId en string, pas en objet.
         // On se contente de savoir que la MAJ a réussi (200).
     }
+    /// GET /participations/user/{userId}
+        /// Récupère toutes les participations d'un utilisateur (tous statuts)
+        func listParticipationsForUser(userId: String) async throws -> [Participation] {
+            let urlString = "\(baseURL)/participations/user/\(userId)"
+            guard let url = URL(string: urlString) else { throw ParticipationError.badURL }
+
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+
+            // route publique, mais on peut envoyer le token si dispo
+            if let token = try? KeychainManager.shared.getJWT() {
+                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            }
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                throw ParticipationError.invalidResponse(-1, "no http response")
+            }
+
+            let bodyString = String(data: data, encoding: .utf8) ?? "<no body>"
+            print("🛰 listParticipationsForUser(\(userId)) HTTP \(http.statusCode)")
+            print("🧪 RAW JSON:", bodyString.prefix(500), "…")
+
+            guard (200...299).contains(http.statusCode) else {
+                throw ParticipationError.invalidResponse(http.statusCode, bodyString)
+            }
+
+
+            do {
+                let decoder = JSONDecoder()
+                let dtos = try decoder.decode([UserParticipationDTO].self, from: data)
+
+                // Mapper vers ton modèle Participation pour que le reste du code ne change pas
+                let participations: [Participation] = dtos.map { dto in
+                    let user = ParticipationUser(id: dto.userId, email: nil)
+                    return Participation(
+                        id: dto.id,
+                        user: user,
+                        sortie: dto.sortieId,
+                        status: dto.status,
+                        createdAt: dto.createdAt,
+                        updatedAt: dto.updatedAt
+                    )
+                }
+
+                print("✅ \(participations.count) participations (user) mappées pour userId \(userId)")
+                return participations
+            } catch {
+                print("❌ listParticipationsForUser decoding error:", error)
+                throw ParticipationError.decoding(error)
+            }
+        }
 }

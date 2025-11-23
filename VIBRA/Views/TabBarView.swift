@@ -2,8 +2,7 @@
 //  TabBarView.swift
 //  VIBRA
 //
-//  Created by mac book pro on 11/7/25.
-//  Version corrigée : custom tab bar fixe, bouton central réduit et navigation propre.
+//  Version : barre corrigée + bouton central cohérent + bouton chat en haut
 //
 
 import SwiftUI
@@ -19,10 +18,12 @@ struct TabBarView: View {
     // Modal pour la création (bouton central)
     @State private var showCreateModal: Bool = false
 
-    // safe area bottom (fallback au cas où)
     private var bottomSafeAreaInset: CGFloat {
-        let inset = UIApplication.shared.windows.first?.safeAreaInsets.bottom
-        return inset ?? 0
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first(where: { $0.isKeyWindow })?
+            .safeAreaInsets.bottom ?? 0
     }
 
     var body: some View {
@@ -55,49 +56,44 @@ struct TabBarView: View {
                         .ignoresSafeArea(edges: .bottom)
                 }
                 .tint(AppColors.GreenAccent)
-                // give space for the custom bar so content isn't hidden behind it
-                .padding(.bottom, 90)
+                // on n’utilise plus un gros padding bas qui donnait l’effet "flottant"
+                //.padding(.bottom, 90)
 
-                // MARK: - Custom bottom tab bar (overlay)
+                // MARK: - Custom bottom tab bar + center button
                 VStack {
                     Spacer()
 
-                    HStack {
-                        Spacer()
+                    ZStack(alignment: .bottom) {
+                        // Barre de navigation inférieure
+                        HStack {
+                            // Côté gauche
+                            tabItem(icon: "house.fill", index: 0)
+                            Spacer()
+                            tabItem(icon: "map.fill", index: 1)
 
-                        // Tab items (left)
-                        tabItem(icon: "house.fill", index: 0)
-                        Spacer(minLength: 20)
-                        tabItem(icon: "map.fill", index: 1)
+                            Spacer(minLength: 60) // espace pour le bouton central
 
-                        Spacer(minLength: 32) // espace pour le bouton central
+                            // Côté droit
+                            tabItem(icon: "person.2.fill", index: 2)
+                            Spacer()
+                            tabItem(icon: "person.text.rectangle", index: 3)
+                        }
+                        .padding(.horizontal, 26)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                                .fill(AppColors.CardDark.opacity(0.98))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                                .stroke(AppColors.DividerColor, lineWidth: 0.6)
+                        )
+                        .shadow(color: AppColors.ShadowColor.opacity(0.8), radius: 10, x: 0, y: 6)
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, max(8, bottomSafeAreaInset)) // bien calée au bas
 
-                        // Tab items (right)
-                        tabItem(icon: "person.2.fill", index: 2)
-                        Spacer(minLength: 20)
-                        tabItem(icon: "person.text.rectangle", index: 3)
-
-                        Spacer()
-                    }
-                    .padding(.horizontal, 26)
-                    .padding(.vertical, 12)
-                    .background(
-                        // solid-ish capsule so it doesn't look transparent or sit above content
-                        Capsule()
-                            .fill(AppColors.CardDark.opacity(0.95))
-                    )
-                    .overlay(
-                        Capsule()
-                            .stroke(AppColors.DividerColor, lineWidth: 0.6)
-                    )
-                    .shadow(color: AppColors.ShadowColor.opacity(0.85), radius: 10, x: 0, y: 6)
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, max(12, bottomSafeAreaInset)) // respecte la safe area
-
-                    // Centre button sits visually above the capsule (overlay)
-                    .overlay(
+                        // Bouton central par-dessus la barre
                         Button(action: {
-                            // action propre : ouvrir modal de création
                             withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
                                 showCreateModal = true
                             }
@@ -105,22 +101,20 @@ struct TabBarView: View {
                             ZStack {
                                 Circle()
                                     .fill(AppColors.GreenAccent)
-                                    .frame(width: 58, height: 58) // taille réduite (plus correcte)
-                                    .shadow(color: AppColors.GlowGreen.opacity(0.8), radius: 16, x: 0, y: 6)
+                                    .frame(width: 64, height: 64)
+                                    .shadow(color: AppColors.GlowGreen.opacity(0.9), radius: 18, x: 0, y: 8)
 
                                 Image(systemName: "plus")
-                                    .font(.system(size: 22, weight: .bold))
+                                    .font(.system(size: 24, weight: .bold))
                                     .foregroundColor(.black)
                             }
                         }
-                        // place it centered horizontally and slightly above the bar (pas trop haut)
-                        .offset(y: -32)
-                        , alignment: .center
-                    )
-                } // VStack
-                .edgesIgnoringSafeArea(.bottom)
+                        .offset(y: -26) // remonte légèrement le bouton au-dessus de la barre
+                    }
+                    .ignoresSafeArea(edges: .bottom)
+                }
 
-                // MARK: - Top Bar (logo / menu / profile)
+                // MARK: - Top Bar (logo / menu / chat / profile)
                 VStack(spacing: 0) {
                     HStack {
                         Text("VIBRA")
@@ -148,9 +142,19 @@ struct TabBarView: View {
                                 )
                                 .shadow(color: AppColors.ShadowColor.opacity(0.7), radius: 6, x: 0, y: 3)
                         }
-                        .padding(.trailing, 8)
 
-                        // Profile icon inside top bar (à côté du menu)
+                        // Bouton Chat à côté du profil
+                        NavigationLink {
+                            ChatsListView()
+                        } label: {
+                            Image(systemName: "bubble.left.and.bubble.right.fill")
+                                .font(.system(size: 24))
+                                .foregroundColor(AppColors.GreenAccent)
+                                .shadow(color: AppColors.GlowGreen.opacity(0.7), radius: 10)
+                                .padding(.horizontal, 6)
+                        }
+
+                        // Profile icon
                         NavigationLink {
                             ProfileView()
                         } label: {
@@ -158,7 +162,7 @@ struct TabBarView: View {
                                 .font(.system(size: 28))
                                 .foregroundColor(AppColors.GreenAccent)
                                 .shadow(color: AppColors.GlowGreen.opacity(0.7), radius: 10)
-                                .padding(.leading, 4)
+                                .padding(.leading, 2)
                         }
                     }
                     .padding(.horizontal)
@@ -201,10 +205,10 @@ struct TabBarView: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                     }
 
-                    Spacer() // push topbar up
-                } // VStack topbar
-            } // ZStack
-            // Logout alert + navigation
+                    Spacer()
+                }
+            }
+            // MARK: - Logout alert + navigation
             .alert("Logout", isPresented: $showLogoutAlert, actions: {
                 Button("Cancel", role: .cancel) {}
                 Button("Confirm", role: .destructive) {
@@ -230,7 +234,7 @@ struct TabBarView: View {
             .opacity(0)
             .preferredColorScheme(.dark)
 
-            // MARK: - Full screen modal for CreateSortie (activated by center button)
+            // MARK: - Full screen modal pour CreateSortie (bouton central)
             .fullScreenCover(isPresented: $showCreateModal) {
                 NavigationStack {
                     CreateSortieView()
@@ -244,7 +248,7 @@ struct TabBarView: View {
                         .preferredColorScheme(.dark)
                 }
             }
-        } // NavigationStack
+        }
     }
 
     // MARK: - Tab item builder
@@ -297,5 +301,11 @@ struct MenuItemView: View {
 
 #Preview {
     TabBarView()
+        .preferredColorScheme(.dark)
+}
+
+// Preview demandé pour la liste des chats
+#Preview("Chats") {
+    ChatsListView()
         .preferredColorScheme(.dark)
 }
