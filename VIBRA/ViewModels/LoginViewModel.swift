@@ -15,7 +15,7 @@ final class LoginViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var isLoggedIn = false
     
-    // MARK: - Login avec Remember Me
+    // MARK: - Login (JWT toujours sauvegardé)
     func login(stayConnected: Bool) async {
         isLoading = true
         errorMessage = nil
@@ -24,10 +24,15 @@ final class LoginViewModel: ObservableObject {
             let response = try await AuthService.shared.login(email: email, password: password)
             print("✅ Token reçu : \(response.access_token)")
             
-            if stayConnected {
-                // 🔹 Option sécurisée : Keychain
+            // ✅ Sauvegarder le JWT systématiquement dans le Keychain
+            do {
                 try KeychainManager.shared.saveJWT(token: response.access_token)
+            } catch {
+                print("⚠️ Erreur sauvegarde JWT dans Keychain: \(error)")
             }
+            
+            // Si tu veux garder "stayConnected" pour autre chose (par ex. une préférence utilisateur),
+            // tu peux encore le stocker dans UserDefaults ici si nécessaire.
             
             // Marquer l'utilisateur comme connecté
             isLoggedIn = true

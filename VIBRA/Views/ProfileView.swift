@@ -8,183 +8,329 @@
 import SwiftUI
 
 struct ProfileView: View {
-    // MARK: - ViewModel
-    @StateObject private var viewModel = ProfileViewModel()
+    // Optional userId: if nil, shows current user; if provided, shows that user's profile
+    let userId: String?
+
+    @StateObject private var viewModel: ProfileViewModel
+
+    init(userId: String? = nil) {
+        self.userId = userId
+        _viewModel = StateObject(wrappedValue: ProfileViewModel(viewedUserId: userId))
+    }
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            LinearGradient(
+                gradient: Gradient(colors: [AppColors.BackgroundGradientStart, AppColors.BackgroundGradientEnd]),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
 
             if viewModel.isLoading {
                 ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: .green))
+                    .progressViewStyle(CircularProgressViewStyle(tint: AppColors.GreenAccent))
             } else if let user = viewModel.user {
-                ScrollView {
-                    VStack(spacing: 25) {
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 20) {
+                        profileHeader(for: user)
+                            .padding(.horizontal)
+                            .padding(.top, 12)
 
-                        // MARK: - Profile Header
-                        VStack(spacing: 12) {
-                            if let avatar = user.avatar, !avatar.isEmpty {
-                                AsyncImage(url: URL(string: avatar)) { image in
-                                    image.resizable()
-                                } placeholder: {
-                                    Image("profile")
-                                        .resizable()
-                                }
-                                .scaledToFill()
-                                .frame(width: 90, height: 90)
-                                .clipShape(Circle())
-                                .overlay(
-                                    Circle().stroke(Color.gray.opacity(0.5), lineWidth: 2)
-                                )
-                            } else {
-                                Image("profile")
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: 90, height: 90)
-                                    .clipShape(Circle())
-                                    .overlay(
-                                        Circle().stroke(Color.gray.opacity(0.5), lineWidth: 2)
-                                    )
-                            }
+                        statsRow
+                            .padding(.horizontal)
 
-                            Text("\(user.firstName) \(user.lastName)")
-                                .font(.title2)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.white)
+                        actionButtons(isCurrentUser: userId == nil)
+                            .padding(.horizontal)
 
-                            Text(user.email)
-                                .foregroundColor(.gray)
-                                .font(.subheadline)
+                        segmentBar
+                            .padding(.horizontal)
 
-                            NavigationLink(destination: ProfileUpdateView()) {
-                                HStack {
-                                    Image(systemName: "square.and.pencil")
-                                    Text("Edit Profile")
-                                }
-                                .font(.system(size: 14, weight: .medium))
-                                .padding(.horizontal, 20)
-                                .padding(.vertical, 8)
-                                .background(Color.green)
-                                .foregroundColor(.black)
-                                .cornerRadius(8)
-                            }
-                            .padding(.top, 8)
-                        }
-                        .padding(.top, 40)
-
-                        // MARK: - Statistics Card (Statique pour l'instant)
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text("Your Statistics")
-                                .font(.headline)
-                                .foregroundColor(.white)
-                                .padding(.leading)
-
-                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                                StatCard(icon: "figure.walk", title: "Distance", value: "2,547 km", change: "+125 km this month")
-                                StatCard(icon: "clock.fill", title: "Time", value: "187 hours", change: "+8 hrs this month")
-                                StatCard(icon: "mountain.2.fill", title: "Elevation", value: "28,650 m", change: "+1,000 m this month")
-                                StatCard(icon: "flame.fill", title: "Calories", value: "78,345 kcal", change: "+3,400 kcal this month")
-                            }
-                            .padding()
-                        }
-                        .background(Color(red: 20/255, green: 20/255, blue: 20/255))
-                        .cornerRadius(16)
-                        .padding(.horizontal)
-
-                        Spacer()
+                        contentSection
+                            .padding(.horizontal)
+                            .padding(.bottom, 24)
                     }
                 }
             } else if let error = viewModel.errorMessage {
-                // Show error + retry button
                 VStack(spacing: 12) {
                     Text(error)
                         .foregroundColor(.red)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
-                    HStack(spacing: 16) {
-                        Button(action: {
-                            Task { await viewModel.fetchUser() }
-                        }) {
-                            Text("Réessayer")
-                                .fontWeight(.semibold)
-                                .padding(.vertical, 10)
-                                .padding(.horizontal, 20)
-                                .background(Color.green)
-                                .foregroundColor(.black)
-                                .cornerRadius(8)
-                        }
-
-                        Button(action: {
-                            // Optionnel: effacer token et forcer la reconnexion
-                            do {
-                                try KeychainManager.shared.deleteJWT()
-                                // Ici tu peux poster une notification ou naviguer vers l'écran de login
-                            } catch {
-                                print("❌ Failed to delete token: \(error)")
-                            }
-                        }) {
-                            Text("Se déconnecter")
-                                .foregroundColor(.white)
-                                .padding(.vertical, 10)
-                                .padding(.horizontal, 20)
-                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.2)))
-                        }
+                    Button("Réessayer") {
+                        Task { await viewModel.loadProfile() }
                     }
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 20)
+                    .background(AppColors.GreenAccent)
+                    .foregroundColor(.black)
+                    .cornerRadius(8)
                 }
                 .padding()
             } else {
-                // Etat neutre : inviter à recharger
                 VStack {
                     Text("Aucun profil trouvé")
                         .foregroundColor(.white)
                     Button("Charger") {
-                        Task { await viewModel.fetchUser() }
+                        Task { await viewModel.loadProfile() }
                     }
                     .padding(.top, 8)
                 }
             }
         }
+        .preferredColorScheme(.dark)
         .task {
-            await viewModel.fetchUser()
+            await viewModel.loadProfile()
         }
     }
-}
 
-// MARK: - StatCard Component (inchangé)
-struct StatCard: View {
-    var icon: String
-    var title: String
-    var value: String
-    var change: String
+    // MARK: - Subviews
+    private func profileHeader(for user: User) -> some View {
+        VStack(spacing: 10) {
+            ZStack(alignment: .bottomTrailing) {
+                avatarView(urlString: user.avatar)
+                    .frame(width: 96, height: 96)
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Image(systemName: icon)
-                    .foregroundColor(.green)
-                Text(title)
-                    .foregroundColor(.gray)
-                    .font(.subheadline)
+                if userId == nil {
+                    Image(systemName: "camera.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .padding(6)
+                        .background(AppColors.GreenAccent)
+                        .clipShape(Circle())
+                        .offset(x: 4, y: 4)
+                }
             }
 
-            Text(value)
-                .foregroundColor(.white)
-                .font(.title3)
-                .fontWeight(.semibold)
+            VStack(spacing: 4) {
+                Text("\(user.firstName) \(user.lastName)")
+                    .font(.system(size: 22, weight: .semibold, design: .rounded))
+                    .foregroundColor(AppColors.TextPrimary)
 
-            Text(change)
-                .font(.footnote)
-                .foregroundColor(.green)
+                Text(user.email)
+                    .font(.subheadline)
+                    .foregroundColor(AppColors.TextSecondary)
+            }
+
+            HStack(spacing: 6) {
+                Image(systemName: "mappin.and.ellipse")
+                    .foregroundColor(AppColors.GreenAccent)
+                    .font(.caption)
+                Text("Tunisia")
+                    .font(.caption)
+                    .foregroundColor(AppColors.TextSecondary)
+            }
         }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(red: 28/255, green: 28/255, blue: 28/255))
-        .cornerRadius(12)
+    }
+
+    private var statsRow: some View {
+        HStack(spacing: 18) {
+            statItem(title: "sorties", value: viewModel.sortiesCount)
+            statItem(title: "posts", value: viewModel.publicationsCount)
+            statItem(title: "followers", value: viewModel.followersCount)
+            statItem(title: "following", value: viewModel.followingCount)
+        }
+        .padding(14)
+        .background(AppColors.CardDark.opacity(0.95))
+        .cornerRadius(18)
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(AppColors.BorderColor, lineWidth: 0.6)
+        )
+    }
+
+    private func statItem(title: String, value: Int) -> some View {
+        VStack(spacing: 4) {
+            Text("\(value)")
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .foregroundColor(AppColors.TextPrimary)
+            Text(title)
+                .font(.caption)
+                .foregroundColor(AppColors.TextSecondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func actionButtons(isCurrentUser: Bool) -> some View {
+        HStack(spacing: 12) {
+            if isCurrentUser {
+                NavigationLink(destination: ProfileUpdateView()) {
+                    HStack {
+                        Image(systemName: "square.and.pencil")
+                        Text("Modifier le profil")
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 16)
+                    .background(AppColors.CardGlass)
+                    .foregroundColor(AppColors.TextPrimary)
+                    .cornerRadius(14)
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(AppColors.DividerColor, lineWidth: 0.8))
+                }
+            } else {
+                Button {
+                    Task { await viewModel.toggleFollow() }
+                } label: {
+                    HStack {
+                        Image(systemName: viewModel.isFollowing ? "checkmark" : "plus")
+                        Text(viewModel.isFollowing ? "Suivi" : "Suivre")
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 16)
+                    .background(
+                        LinearGradient(
+                            gradient: Gradient(colors: [AppColors.GreenAccent, AppColors.GreenDark]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .foregroundColor(.black)
+                    .cornerRadius(14)
+                }
+                .disabled(viewModel.isFollowLoading)
+            }
+
+            Button {
+                // future: share or message
+            } label: {
+                HStack {
+                    Image(systemName: isCurrentUser ? "square.and.arrow.up" : "message")
+                    Text(isCurrentUser ? "Partager" : "Message")
+                }
+                .font(.subheadline.weight(.semibold))
+                .padding(.vertical, 10)
+                .padding(.horizontal, 16)
+                .background(AppColors.CardGlass)
+                .foregroundColor(AppColors.TextPrimary)
+                .cornerRadius(14)
+                .overlay(RoundedRectangle(cornerRadius: 14).stroke(AppColors.DividerColor, lineWidth: 0.8))
+            }
+        }
+    }
+
+    private var segmentBar: some View {
+        HStack(spacing: 10) {
+            segmentButton(title: "Sorties", isSelected: viewModel.selectedSegment == .mesSorties) {
+                viewModel.selectedSegment = .mesSorties
+            }
+            segmentButton(title: "Créées", isSelected: viewModel.selectedSegment == .creees) {
+                viewModel.selectedSegment = .creees
+            }
+            segmentButton(title: "Publications", isSelected: viewModel.selectedSegment == .publications) {
+                viewModel.selectedSegment = .publications
+            }
+        }
+    }
+
+    private func segmentButton(title: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: isSelected
+                                           ? [AppColors.GreenAccent, AppColors.GreenDark]
+                                           : [AppColors.CardGlass, AppColors.CardGlass.opacity(0.7)]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .foregroundColor(isSelected ? .black : AppColors.TextSecondary)
+                .cornerRadius(12)
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppColors.DividerColor, lineWidth: 0.8))
+        }
+    }
+
+    private var contentSection: some View {
+        VStack(spacing: 12) {
+            switch viewModel.selectedSegment {
+            case .mesSorties:
+                if viewModel.rides.isEmpty {
+                    emptySection(text: "Aucune sortie trouvée")
+                } else {
+                    ForEach(viewModel.rides, id: \.ride.id) { item in
+                        NavigationLink(destination: SortieDetailView(ride: item.ride, creator: item.creator)) {
+                            RideCardView(item: item)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            case .creees:
+                if viewModel.createdRides.isEmpty {
+                    emptySection(text: "Aucune sortie créée")
+                } else {
+                    ForEach(viewModel.createdRides, id: \.ride.id) { item in
+                        NavigationLink(destination: SortieDetailView(ride: item.ride, creator: item.creator)) {
+                            RideCardView(item: item)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            case .publications:
+                if viewModel.publications.isEmpty {
+                    emptySection(text: "Aucune publication")
+                } else {
+                    ForEach(viewModel.publications) { pub in
+                        PostCardView(
+                            publication: pub,
+                            initialIsLiked: false,
+                            onLikeClick: {},
+                            onCommentClick: {},
+                            onShareClick: {},
+                            onMenuClick: {}
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private func emptySection(text: String) -> some View {
+        RoundedRectangle(cornerRadius: 18)
+            .fill(AppColors.CardDark.opacity(0.95))
+            .frame(height: 120)
+            .overlay(
+                Text(text)
+                    .font(.subheadline)
+                    .foregroundColor(AppColors.TextSecondary)
+            )
+    }
+
+    private func avatarView(urlString: String?) -> some View {
+        Group {
+            if let s = urlString, let url = URL(string: s), !s.isEmpty {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        Circle().fill(AppColors.CardGlass)
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    case .failure:
+                        Circle().fill(AppColors.CardGlass)
+                            .overlay(Image(systemName: "person.fill").foregroundColor(AppColors.TextTertiary))
+                    @unknown default:
+                        Circle().fill(AppColors.CardGlass)
+                    }
+                }
+            } else {
+                Circle()
+                    .fill(AppColors.CardGlass)
+                    .overlay(Image(systemName: "person.fill").foregroundColor(AppColors.TextTertiary))
+            }
+        }
+        .clipShape(Circle())
+        .overlay(Circle().stroke(AppColors.DividerColor, lineWidth: 1.2))
+        .shadow(color: AppColors.ShadowColor, radius: 8, x: 0, y: 4)
     }
 }
 
 // MARK: - Preview
 #Preview {
-    ProfileView()
+    NavigationStack {
+        ProfileView()
+    }
 }

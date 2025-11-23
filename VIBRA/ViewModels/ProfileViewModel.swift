@@ -10,35 +10,84 @@ import Combine
 
 @MainActor
 final class ProfileViewModel: ObservableObject {
+    // MARK: - Inputs
+    let viewedUserId: String?   // nil => current user profile
+
+    // MARK: - Segments
+    enum Segment {
+        case mesSorties
+        case creees
+        case publications
+    }
+
+    @Published var selectedSegment: Segment = .mesSorties
+
+    // MARK: - Published state
     @Published var user: User?
     @Published var isLoading = false
     @Published var errorMessage: String?
 
-    func fetchUser() async {
+    // Follow stats
+    @Published var followersCount: Int = 0
+    @Published var followingCount: Int = 0
+    @Published var isFollowing: Bool = false
+    @Published var isFollowLoading: Bool = false
+
+    // Content counts
+    @Published var sortiesCount: Int = 0
+    @Published var publicationsCount: Int = 0
+
+    // Content lists
+    @Published var rides: [RideWithCreator] = []
+    @Published var createdRides: [RideWithCreator] = []
+    @Published var publications: [PublicationResponse] = []
+
+    init(viewedUserId: String? = nil) {
+        self.viewedUserId = viewedUserId
+    }
+
+    // MARK: - Public API
+    func loadProfile() async {
         isLoading = true
         errorMessage = nil
+        defer { isLoading = false }
 
         do {
-            // Récupérer le JWT (propager l'erreur si introuvable)
-            let token: String
-            do {
-                token = try KeychainManager.shared.getJWT()
-            } catch {
-                throw ProfileError.missingToken(error)
-            }
-
-            // Extraire l'ID utilisateur depuis le token (plus robuste)
-            guard let userId = token.getUserIdFromJWT() else {
-                throw ProfileError.invalidTokenPayload
-            }
-
-            // Appeler l'API (AuthService reste inchangé)
+            let userId = try await resolveUserId()
             let fetchedUser = try await AuthService.shared.getUser(byId: userId)
             self.user = fetchedUser
-            self.errorMessage = nil
 
+            // Parallel: follow stats, is-following, content lists
+            async let statsTask = AuthService.shared.fetchFollowStats(for: userId)
+            async let isFollowingTask = (try? AuthService.shared.checkIsFollowing(userId: userId))
+            async let ridesTask = HomeService.shared.fetchRidesWithCreators()
+            async let publicationsTask = PublicationService.shared.getPublicationsByAuthor(authorId: userId)
+
+            let stats = try await statsTask
+            self.followersCount = stats.followersCount
+            self.followingCount = stats.followingCount
+
+            if let isFollow = try await isFollowingTask {
+                self.isFollowing = isFollow
+            } else {
+                self.isFollowing = false
+            }
+
+            let allRides = try await ridesTask
+            let userRides = allRides.filter { $0.creator?.id == userId }
+            self.rides = userRides
+            self.createdRides = userRides
+            self.sortiesCount = userRides.count
+
+            switch await publicationsTask {
+            case .success(let list):
+                self.publications = list
+                self.publicationsCount = list.count
+            case .failure:
+                self.publications = []
+                self.publicationsCount = 0
+            }
         } catch let pError as ProfileError {
-            // Erreurs contrôlées depuis ce ViewModel
             switch pError {
             case .missingToken:
                 errorMessage = "Token introuvable. Veuillez vous reconnecter."
@@ -48,14 +97,43 @@ final class ProfileViewModel: ObservableObject {
                 errorMessage = "Erreur: \(underlying.localizedDescription)"
             }
             print("❌ Profile fetch error (ProfileError): \(pError)")
-
         } catch {
-            // Erreurs provenant d'AuthService ou autres (URLError, decoding, etc.)
             errorMessage = "Impossible de charger le profil. (\(error.localizedDescription))"
             print("❌ Profile fetch error: \(error)")
         }
+    }
 
-        isLoading = false
+    func toggleFollow() async {
+        guard let targetId = viewedUserId ?? user?.id else { return }
+        isFollowLoading = true
+        defer { isFollowLoading = false }
+        do {
+            if isFollowing {
+                try await AuthService.shared.unfollowUser(userId: targetId)
+                isFollowing = false
+                followersCount = max(0, followersCount - 1)
+            } else {
+                try await AuthService.shared.followUser(userId: targetId)
+                isFollowing = true
+                followersCount += 1
+            }
+        } catch {
+            print("❌ toggleFollow error: \(error)")
+        }
+    }
+
+    // MARK: - Helpers
+    private func resolveUserId() async throws -> String {
+        if let id = viewedUserId { return id }
+        do {
+            let token = try KeychainManager.shared.getJWT()
+            if let userId = token.getUserIdFromJWT() {
+                return userId
+            }
+            throw ProfileError.invalidTokenPayload
+        } catch {
+            throw ProfileError.missingToken(error)
+        }
     }
 }
 

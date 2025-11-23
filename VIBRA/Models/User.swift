@@ -15,6 +15,9 @@ struct User: Codable {
     let avatar: String?
     let role: String
     let password: String?     // utilisé seulement lors de la création
+    // Follow stats (optionnels, peuvent venir de /user/:id ou d'autres endpoints)
+    let followersCount: Int?
+    let followingCount: Int?
 
     enum CodingKeys: String, CodingKey {
         case id = "_id"
@@ -26,5 +29,7 @@ struct User: Codable {
         case avatar
         case role
         case password
+        case followersCount
+        case followingCount
     }
 }

@@ -7,7 +7,7 @@
 import Foundation
 
 struct Constants {
-    static let baseURL = "http://localhost:3000" // ⚠️ Change selon ton backend
+    static let baseURL = "https://dam-4sim2.onrender.com" // ⚠️ Change selon ton backend
     static let openRouteApiKey = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjI1NDQyOWQwY2JhNjQ5ZmViYjEzNzlkNDAwZjNjZDgyIiwiaCI6Im11cm11cjY0In0="
 }
 

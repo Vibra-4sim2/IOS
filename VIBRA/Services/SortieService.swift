@@ -2,9 +2,10 @@
 //  SortieService.swift
 //  VIBRA
 //
-//  Created by mac book pro on 11/15/25.
-//  Version corrigée — endpoint /geojson + fallback decoders
+//  Service Sortie/Camping + ORS avec auth JWT + multipart /sorties
+//  Version fusionnée
 //
+
 import Foundation
 import CoreLocation
 
@@ -49,7 +50,7 @@ struct CampingResponse: Codable {
     let dateFin: String
 }
 
-// Sortie DTO (aligné sur ton schema Sortie)
+// Sortie DTO pour création simple JSON (si tu veux l'utiliser côté backend REST classique)
 struct CreateSortieRequest: Codable {
     let titre: String
     let description: String?
@@ -62,6 +63,7 @@ struct CreateSortieRequest: Codable {
     let itineraire: ItineraireDTO?
 }
 
+// Sortie DTO retourné par le backend
 struct SortieResponse: Codable {
     let _id: String
     let titre: String
@@ -138,6 +140,7 @@ enum SortieServiceError: Error {
     case decodingError
     case openRouteError
     case missingItineraire
+    case unauthorized       // 401
 }
 
 // MARK: - Service
@@ -156,22 +159,55 @@ final class SortieService {
         self.openRouteApiKey = Constants.openRouteApiKey
     }
     
+    // MARK: - Helpers Auth
+    
+    private func applyAuthHeader(to request: inout URLRequest) {
+        if let token = try? KeychainManager.shared.getJWT(), !token.isEmpty {
+            let headerValue = "Bearer \(token)"
+            request.setValue(headerValue, forHTTPHeaderField: "Authorization")
+            #if DEBUG
+            print("[AUTH] Authorization header set: Bearer \(token.prefix(16))...")
+            #endif
+        } else {
+            #if DEBUG
+            print("[AUTH] No JWT found in Keychain – Authorization header NOT set")
+            #endif
+        }
+    }
+    
     // MARK: - Camping
     
     func createCamping(_ camping: CreateCampingRequest) async throws -> CampingResponse {
         let url = baseURL.appendingPathComponent("campings")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        applyAuthHeader(to: &request)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(camping)
         
+        #if DEBUG
+        print("[HTTP] POST \(url.absoluteString) (createCamping)")
+        if let bodyString = String(data: request.httpBody ?? Data(), encoding: .utf8) {
+            print("[HTTP] Request body (camping): \(bodyString)")
+        }
+        print("[HTTP] Headers (camping): \(request.allHTTPHeaderFields ?? [:])")
+        #endif
+        
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse,
-              (200..<300).contains(http.statusCode) else {
-            #if DEBUG
-            print("createCamping status: \((response as? HTTPURLResponse)?.statusCode ?? -1)")
-            print(String(data: data, encoding: .utf8) ?? "no body")
-            #endif
+        guard let http = response as? HTTPURLResponse else {
+            throw SortieServiceError.invalidResponse
+        }
+        
+        #if DEBUG
+        print("[HTTP] createCamping status: \(http.statusCode)")
+        print("[HTTP] createCamping raw response: \(String(data: data, encoding: .utf8) ?? "no body")")
+        #endif
+        
+        if http.statusCode == 401 {
+            throw SortieServiceError.unauthorized
+        }
+        
+        guard (200..<300).contains(http.statusCode) else {
             throw SortieServiceError.invalidResponse
         }
         
@@ -182,22 +218,210 @@ final class SortieService {
         }
     }
     
-    // MARK: - Sortie
+    // MARK: - Sortie (multipart/form-data)
+    
+    struct CreateSortieMultipartPayload {
+        let titre: String
+        let description: String?
+        let dateISO: String
+        /// type côté UI: "RANDO", "VELO_ELECTRIQUE", "CAMPING"
+        let typeUI: String
+        let optionCamping: Bool
+        /// Données binaires de la photo sélectionnée (optionnel)
+        let photoData: Data?
+        let lieu: String?
+        let difficulte: String?
+        let niveau: String?
+        let capacite: Int?
+        let prix: Double?
+        let campingId: String?
+        /// Itinéraire sérialisé en JSON (ItineraireDTO)
+        let itineraireJSON: String
+        /// Camping sérialisé en JSON si création en même temps
+        let campingJSON: String?
+    }
+    
+    /// Map le type UI vers le type attendu par l'enum SortieType du backend
+    private func mapTypeForBackend(from typeUI: String) -> String {
+        switch typeUI {
+        case "RANDO":
+            return "RANDONNEE"
+        case "VELO_ELECTRIQUE":
+            return "VELO"
+        case "CAMPING":
+            return "CAMPING"
+        default:
+            // sécurité: une valeur inconnue est ramenée à RANDONNEE
+            return "RANDONNEE"
+        }
+    }
+    
+    func createSortieMultipart(_ payload: CreateSortieMultipartPayload) async throws -> SortieResponse {
+        let url = baseURL.appendingPathComponent("sorties")
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        applyAuthHeader(to: &request)
+        
+        let boundary = "Boundary-\(UUID().uuidString)"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        
+        var body = Data()
+        
+        func appendFormField(name: String, value: String) {
+            let field = """
+            --\(boundary)\r
+            Content-Disposition: form-data; name=\"\(name)\"\r
+            \r
+            \(value)\r
+
+            """
+            if let data = field.data(using: .utf8) {
+                body.append(data)
+            }
+        }
+        
+        func appendFileField(name: String, filename: String, mimeType: String, fileData: Data) {
+            var fieldData = Data()
+            var fieldHeader = ""
+            fieldHeader += "--\(boundary)\r\n"
+            fieldHeader += "Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(filename)\"\r\n"
+            fieldHeader += "Content-Type: \(mimeType)\r\n\r\n"
+            
+            if let headerData = fieldHeader.data(using: .utf8) {
+                fieldData.append(headerData)
+            }
+            fieldData.append(fileData)
+            if let closing = "\r\n".data(using: .utf8) {
+                fieldData.append(closing)
+            }
+            body.append(fieldData)
+        }
+        
+        // Champs texte principaux
+        appendFormField(name: "titre", value: payload.titre)
+        if let desc = payload.description {
+            appendFormField(name: "description", value: desc)
+        }
+        appendFormField(name: "date", value: payload.dateISO)
+        
+        // Envoi de la valeur de l'enum backend
+        let typeBackend = mapTypeForBackend(from: payload.typeUI)
+        appendFormField(name: "type", value: typeBackend)
+        
+        appendFormField(name: "option_camping", value: payload.optionCamping ? "true" : "false")
+        
+        // Optionnels
+        if let lieu = payload.lieu {
+            appendFormField(name: "lieu", value: lieu)
+        }
+        if let difficulte = payload.difficulte {
+            appendFormField(name: "difficulte", value: difficulte)
+        }
+        if let niveau = payload.niveau {
+            appendFormField(name: "niveau", value: niveau)
+        }
+        if let capacite = payload.capacite {
+            appendFormField(name: "capacite", value: String(capacite))
+        }
+        if let prix = payload.prix {
+            appendFormField(name: "prix", value: String(prix))
+        }
+        if let campingId = payload.campingId {
+            appendFormField(name: "campingId", value: campingId)
+        }
+        
+        // Itinéraire JSON
+        appendFormField(name: "itineraire", value: payload.itineraireJSON)
+        
+        // Camping JSON (optionnel)
+        if let campingJSON = payload.campingJSON {
+            appendFormField(name: "camping", value: campingJSON)
+        }
+        
+        // Photo fichier (optionnel)
+        if let photoData = payload.photoData {
+            appendFileField(
+                name: "photo",
+                filename: "sortie_photo.jpg",
+                mimeType: "image/jpeg",
+                fileData: photoData
+            )
+        }
+        
+        // Fin du body
+        if let closing = "--\(boundary)--\r\n".data(using: .utf8) {
+            body.append(closing)
+        }
+        
+        request.httpBody = body
+        
+        #if DEBUG
+        print("[HTTP] POST \(url.absoluteString) (createSortieMultipart)")
+        print("[HTTP] Headers (sortie): \(request.allHTTPHeaderFields ?? [:])")
+        if let bodyString = String(data: body, encoding: .utf8) {
+            print("[HTTP] Multipart body (truncated):")
+            print(bodyString.prefix(800))
+        }
+        #endif
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw SortieServiceError.invalidResponse
+        }
+        
+        #if DEBUG
+        print("[HTTP] createSortieMultipart status: \(http.statusCode)")
+        print("[HTTP] createSortieMultipart raw response: \(String(data: data, encoding: .utf8) ?? "no body")")
+        #endif
+        
+        if http.statusCode == 401 {
+            throw SortieServiceError.unauthorized
+        }
+        
+        guard (200..<300).contains(http.statusCode) else {
+            throw SortieServiceError.invalidResponse
+        }
+        
+        do {
+            return try JSONDecoder().decode(SortieResponse.self, from: data)
+        } catch {
+            throw SortieServiceError.decodingError
+        }
+    }
+    
+    // MARK: - Sortie simple en JSON (si tu veux aussi garder cette méthode)
     
     func createSortie(_ sortie: CreateSortieRequest) async throws -> SortieResponse {
         let url = baseURL.appendingPathComponent("sorties")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        applyAuthHeader(to: &request)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(sortie)
         
+        #if DEBUG
+        print("[HTTP] POST \(url.absoluteString) (createSortie JSON)")
+        if let bodyString = String(data: request.httpBody ?? Data(), encoding: .utf8) {
+            print("[HTTP] Request body (sortie JSON): \(bodyString)")
+        }
+        print("[HTTP] Headers (sortie JSON): \(request.allHTTPHeaderFields ?? [:])")
+        #endif
+        
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse,
-              (200..<300).contains(http.statusCode) else {
-            #if DEBUG
-            print("createSortie status: \((response as? HTTPURLResponse)?.statusCode ?? -1)")
-            print(String(data: data, encoding: .utf8) ?? "no body")
-            #endif
+        guard let http = response as? HTTPURLResponse else {
+            throw SortieServiceError.invalidResponse
+        }
+        
+        #if DEBUG
+        print("[HTTP] createSortie JSON status: \(http.statusCode)")
+        print("[HTTP] createSortie JSON raw response: \(String(data: data, encoding: .utf8) ?? "no body")")
+        #endif
+        
+        if http.statusCode == 401 {
+            throw SortieServiceError.unauthorized
+        }
+        
+        guard (200..<300).contains(http.statusCode) else {
             throw SortieServiceError.invalidResponse
         }
         
@@ -219,16 +443,18 @@ final class SortieService {
             profile = "cycling-regular"
         case "RANDO":
             profile = "foot-walking"
+        case "CAMPING":
+            // pour un camping on garde un profil à pied par défaut
+            profile = "foot-walking"
         default:
             profile = "foot-walking"
         }
-        // On ajoute explicitement /geojson pour forcer le format attendu
         let full = base + profile + "/geojson"
         return URL(string: full)!
     }
     
     /// Appel OpenRouteService pour obtenir l’itinéraire entre start et end.
-    /// `typeSortie` permet de choisir dynamiquement le bon profil (rando / vélo).
+    /// `typeSortie` permet de choisir dynamiquement le bon profil (rando / vélo / camping).
     func fetchItineraire(
         start: CLLocationCoordinate2D,
         end: CLLocationCoordinate2D,

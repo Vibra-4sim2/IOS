@@ -6,6 +6,7 @@
 import SwiftUI
 import MapKit
 import CoreLocation
+import PhotosUI
 
 struct CreateSortieView: View {
 
@@ -19,7 +20,6 @@ struct CreateSortieView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                // Fond dégradé style maquettes
                 LinearGradient(
                     gradient: Gradient(colors: [
                         AppColors.BackgroundGradientStart,
@@ -32,33 +32,6 @@ struct CreateSortieView: View {
 
                 ScrollView {
                     VStack(spacing: 20) {
-
-                        // Petit header façon VIBRA
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("VIBRA")
-                                    .font(.system(size: 24, weight: .bold, design: .rounded))
-                                    .foregroundColor(AppColors.TextPrimary)
-                                Text("Créer une nouvelle aventure")
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundColor(AppColors.TextSecondary)
-                            }
-                            Spacer()
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [AppColors.GreenAccent, AppColors.TealAccent]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .frame(width: 42, height: 42)
-                                .shadow(color: AppColors.GlowGreen.opacity(0.7), radius: 10, x: 0, y: 4)
-                                .overlay(
-                                    Image(systemName: "person.fill")
-                                        .foregroundColor(.black)
-                                )
-                        }
 
                         // MARK: - Infos sortie
                         styledGroupBox(title: "Informations de la sortie", systemImage: "info.circle") {
@@ -73,17 +46,74 @@ struct CreateSortieView: View {
                                 )
                                 .accentColor(AppColors.GreenAccent)
 
+                                // IMPORTANT : valeurs UI "RANDO" / "VELO_ELECTRIQUE" / "CAMPING"
+                                // qui seront ensuite mappées vers l'enum backend: RANDONNEE / VELO / CAMPING
                                 Picker("Type", selection: $viewModel.type) {
                                     Text("Randonnée").tag("RANDO")
                                     Text("Vélo électrique").tag("VELO_ELECTRIQUE")
+                                    Text("Camping").tag("CAMPING")
                                 }
                                 .pickerStyle(.segmented)
                                 .tint(AppColors.TealAccent)
 
-                                vibraTextField("URL de la photo (optionnel)", text: $viewModel.photoURL)
+                                // --------- Sélection d'image (remplace l'URL) ----------
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Photo de la sortie (optionnel)")
+                                        .font(.subheadline)
+                                        .foregroundColor(AppColors.TextSecondary)
+
+                                    HStack(spacing: 12) {
+                                        PhotosPicker(
+                                            selection: $viewModel.selectedPhotoItem,
+                                            matching: .images,
+                                            photoLibrary: .shared()
+                                        ) {
+                                            HStack {
+                                                Image(systemName: "photo.on.rectangle")
+                                                Text(viewModel.selectedPhotoItem == nil ? "Choisir une image" : "Changer l’image")
+                                            }
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .padding(.vertical, 10)
+                                            .padding(.horizontal, 14)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                                    .fill(AppColors.CardGlass)
+                                            )
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                                    .stroke(AppColors.DividerColor, lineWidth: 0.7)
+                                            )
+                                        }
+
+                                        if let image = viewModel.selectedUIImage {
+                                            Image(uiImage: image)
+                                                .resizable()
+                                                .scaledToFill()
+                                                .frame(width: 60, height: 60)
+                                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                                        .stroke(AppColors.DividerColor, lineWidth: 0.7)
+                                                )
+                                        }
+                                    }
+
+                                    if viewModel.isLoadingImage {
+                                        ProgressView("Chargement de l’image…")
+                                            .progressViewStyle(CircularProgressViewStyle(tint: AppColors.GreenAccent))
+                                            .font(.footnote)
+                                    }
+                                }
 
                                 TextField("Capacité (optionnel)", value: $viewModel.capacite, formatter: NumberFormatter())
                                     .keyboardType(.numberPad)
+                                    .modifier(VibraFieldModifier())
+                                
+                                vibraTextField("Difficulté (ex: FACILE, MOYEN, DIFFICILE)", text: $viewModel.difficulte)
+                                vibraTextField("Niveau (ex: DEBUTANT, INTERMEDIAIRE, AVANCE)", text: $viewModel.niveau)
+                                
+                                TextField("Prix de la sortie (optionnel)", value: $viewModel.prixSortie, formatter: NumberFormatter())
+                                    .keyboardType(.decimalPad)
                                     .modifier(VibraFieldModifier())
                             }
                         }
@@ -193,19 +223,6 @@ struct CreateSortieView: View {
                             }
                         }
 
-                        // MARK: - Messages
-                        if let error = viewModel.errorMessage {
-                            Text(error)
-                                .foregroundColor(AppColors.ErrorRed)
-                                .font(.footnote)
-                        }
-
-                        if let success = viewModel.successMessage {
-                            Text(success)
-                                .foregroundColor(AppColors.SuccessGreen)
-                                .font(.footnote)
-                        }
-
                         // MARK: - CTA principal
                         Button {
                             Task { await viewModel.createSortieAndCamping() }
@@ -239,6 +256,16 @@ struct CreateSortieView: View {
             }
             .navigationTitle("")
             .navigationBarHidden(true)
+            .alert("Erreur", isPresented: $viewModel.showErrorAlert, actions: {
+                Button("OK", role: .cancel) { }
+            }, message: {
+                Text(viewModel.errorMessage ?? "Une erreur est survenue.")
+            })
+            .alert("Succès", isPresented: $viewModel.showSuccessAlert, actions: {
+                Button("OK", role: .cancel) { }
+            }, message: {
+                Text(viewModel.successMessage ?? "Opération réussie.")
+            })
         }
     }
 
@@ -361,7 +388,7 @@ struct VibraFieldModifier: ViewModifier {
     }
 }
 
-// MARK: - MapViewRepresentable inchangé (juste la couleur de route)
+// MARK: - MapViewRepresentable
 
 struct MapViewRepresentable: UIViewRepresentable {
 
