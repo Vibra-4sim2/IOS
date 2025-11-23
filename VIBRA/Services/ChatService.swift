@@ -2,8 +2,9 @@
 //  ChatService.swift
 //  VIBRA
 //
-//  Created by mac book pro on 11/23/25.
+//  Service réseau pour les messages de chat
 //
+
 import Foundation
 
 final class ChatService {
@@ -29,35 +30,6 @@ final class ChatService {
         return request
     }
 
-    // MARK: - Members
-
-    /// GET /chats/sortie/{sortieId}/members
-    func fetchMembers(sortieId: String) async throws -> [ChatMember] {
-        let urlString = "\(baseURL)/chats/sortie/\(sortieId)/members"
-        guard let url = URL(string: urlString) else { throw ParticipationError.badURL }
-
-        let request = try authorizedRequest(url: url, method: "GET")
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse else {
-            throw ParticipationError.invalidResponse(-1, "no http response")
-        }
-
-        let bodyString = String(data: data, encoding: .utf8) ?? "<no body>"
-        print("🛰 fetchMembers(\(sortieId)) HTTP \(http.statusCode)")
-        print("🧪 RAW JSON:", bodyString.prefix(400), "…")
-
-        guard (200...299).contains(http.statusCode) else {
-            throw ParticipationError.invalidResponse(http.statusCode, bodyString)
-        }
-
-        do {
-            return try JSONDecoder().decode([ChatMember].self, from: data)
-        } catch {
-            print("❌ fetchMembers decoding error:", error)
-            throw ParticipationError.decoding(error)
-        }
-    }
-
     // MARK: - Messages
 
     /// GET /messages/sortie/{sortieId}
@@ -79,10 +51,14 @@ final class ChatService {
             throw ParticipationError.invalidResponse(http.statusCode, bodyString)
         }
 
+        // Le backend renvoie { "messages": [ ... ] }
+        struct MessagesResponse: Decodable {
+            let messages: [ChatMessage]
+        }
+
         do {
-            // le backend renvoie probablement un tableau de messages
-            let messages = try JSONDecoder().decode([ChatMessage].self, from: data)
-            // On les trie par date croissante pour affichage
+            let decoded = try JSONDecoder().decode(MessagesResponse.self, from: data)
+            let messages = decoded.messages
             return messages.sorted { ($0.createdDate ?? .distantPast) < ($1.createdDate ?? .distantPast) }
         } catch {
             print("❌ fetchMessages decoding error:", error)
@@ -91,7 +67,7 @@ final class ChatService {
     }
 
     /// POST /messages/sortie/{sortieId}
-    /// Pour l'instant on gère l'envoi de texte uniquement (media à venir)
+    /// Pour l’instant: envoi de texte uniquement (type = text)
     func sendTextMessage(sortieId: String, content: String) async throws -> ChatMessage {
         let urlString = "\(baseURL)/messages/sortie/\(sortieId)"
         guard let url = URL(string: urlString) else { throw ParticipationError.badURL }

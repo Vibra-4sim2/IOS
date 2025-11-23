@@ -2,15 +2,16 @@
 //  ChatsListView.swift
 //  VIBRA
 //
-//  Created by mac book pro on 11/23/25.
+//  Liste des chats (sorties où l'utilisateur est ACCEPTÉ)
 //
+
 import SwiftUI
 
 struct ChatsListView: View {
-    @StateObject private var vm = ChatsViewModel()
+    @StateObject private var vm = ChatsViewModel(mode: .list)
 
     var body: some View {
-        
+
         NavigationStack {
             ZStack {
                 LinearGradient(
@@ -23,7 +24,7 @@ struct ChatsListView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     header
 
-                    if vm.isLoading {
+                    if vm.isLoadingList {
                         VStack(spacing: 8) {
                             ProgressView()
                                 .progressViewStyle(.circular)
@@ -33,7 +34,7 @@ struct ChatsListView: View {
                                 .foregroundColor(AppColors.TextSecondary)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                    } else if let err = vm.errorMessage {
+                    } else if let err = vm.listErrorMessage {
                         errorView(err)
                     } else if vm.userId == nil {
                         notLoggedInView
@@ -48,9 +49,7 @@ struct ChatsListView: View {
 
                                         NavigationLink(
                                             destination: {
-                                                // Si tu as un Ride complet, tu peux recréer un Ride minimal ici,
-                                                // pour le moment on affiche juste un placeholder de détail
-                                                ChatDetailPlaceholder(sortie: sortie)
+                                                ChatView(sortieId: sortieId, sortieTitle: sortie.titre)
                                             },
                                             label: {
                                                 chatRow(participation: participation, sortie: sortie)
@@ -98,7 +97,6 @@ struct ChatsListView: View {
 
     private func chatRow(participation: Participation, sortie: ParticipationSortie) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            // Avatar circulaire avec première lettre du titre
             Circle()
                 .fill(AppColors.CardGlass)
                 .frame(width: 40, height: 40)
@@ -152,7 +150,7 @@ struct ChatsListView: View {
                 .foregroundColor(.red)
                 .multilineTextAlignment(.center)
             Button {
-                Task { await vm.load() }
+                vm.reloadList()   // ⬅️ ICI au lieu d'appeler loadList()
             } label: {
                 Text("Réessayer")
                     .font(.subheadline.weight(.semibold))
@@ -198,36 +196,4 @@ struct ChatsListView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .padding()
     }
-}
-
-// Placeholder pour la page détail de chat (en attendant la vraie implémentation)
-struct ChatDetailPlaceholder: View {
-    let sortie: ParticipationSortie
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Text(sortie.titre ?? "Chat")
-                .font(.title2.weight(.semibold))
-                .foregroundColor(AppColors.TextPrimary)
-            Text("Ici on mettra le chat pour cette sortie.")
-                .font(.caption)
-                .foregroundColor(AppColors.TextSecondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(
-            LinearGradient(
-                gradient: Gradient(colors: [AppColors.BackgroundGradientStart, AppColors.BackgroundGradientEnd]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
-        )
-        .navigationTitle("Chat")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-#Preview {
-    ChatsListView()
-        .preferredColorScheme(.dark)
 }
