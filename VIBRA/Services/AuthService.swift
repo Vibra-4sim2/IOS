@@ -15,6 +15,7 @@ final class AuthService {
     
     // MARK: - LOGIN
     func login(email: String, password: String) async throws -> AuthResponse {
+        // Fix interpolation of base URL
         guard let url = URL(string: "\(Constants.baseURL)/auth/login") else {
             throw URLError(.badURL)
         }
@@ -235,6 +236,89 @@ final class AuthService {
         // J'assume que le serveur renvoie l'utilisateur mis à jour en JSON.
         return try JSONDecoder().decode(User.self, from: data)
     }
+    // MARK: - FOLLOW / UNFOLLOW & FOLLOW STATS
+    struct FollowStatsResponse: Codable {
+        let followersCount: Int
+        let followingCount: Int
+    }
+
+    struct IsFollowingResponse: Codable {
+        let isFollowing: Bool
+    }
+
+    // Helper to add Authorization header if JWT exists
+    private func applyAuthHeader(to request: inout URLRequest) {
+        if let token = try? KeychainManager.shared.getJWT() {
+            request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+    }
+
+    func followUser(userId: String) async throws {
+        guard let url = URL(string: "\(Constants.baseURL)/user/\(userId)/follow") else {
+            throw URLError(.badURL)
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        applyAuthHeader(to: &request)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            let message = String(data: data, encoding: .utf8) ?? "Unknown error"
+            print("❌ followUser error: \(message)")
+            throw URLError(.badServerResponse)
+        }
+    }
+
+    func unfollowUser(userId: String) async throws {
+        guard let url = URL(string: "\(Constants.baseURL)/user/\(userId)/follow") else {
+            throw URLError(.badURL)
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        applyAuthHeader(to: &request)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            let message = String(data: data, encoding: .utf8) ?? "Unknown error"
+            print("❌ unfollowUser error: \(message)")
+            throw URLError(.badServerResponse)
+        }
+    }
+
+    func fetchFollowStats(for userId: String) async throws -> FollowStatsResponse {
+        guard let url = URL(string: "\(Constants.baseURL)/user/\(userId)/follow-stats") else {
+            throw URLError(.badURL)
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        applyAuthHeader(to: &request)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            let message = String(data: data, encoding: .utf8) ?? "Unknown error"
+            print("❌ fetchFollowStats error: \(message)")
+            throw URLError(.badServerResponse)
+        }
+        return try JSONDecoder().decode(FollowStatsResponse.self, from: data)
+    }
+
+    func checkIsFollowing(userId: String) async throws -> Bool {
+        guard let url = URL(string: "\(Constants.baseURL)/user/\(userId)/is-following") else {
+            throw URLError(.badURL)
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        applyAuthHeader(to: &request)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            let message = String(data: data, encoding: .utf8) ?? "Unknown error"
+            print("❌ checkIsFollowing error: \(message)")
+            throw URLError(.badServerResponse)
+        }
+        let decoded = try JSONDecoder().decode(IsFollowingResponse.self, from: data)
+        return decoded.isFollowing
+    }
 }
 
 // MARK: - Response Models
@@ -260,5 +344,3 @@ struct UpdateUserRequest: Codable {
         case password
     }
 }
-
-

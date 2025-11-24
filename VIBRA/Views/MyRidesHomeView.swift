@@ -86,25 +86,6 @@ struct MyRidesHomeView: View {
                                         }
                                     }
                                 }
-
-                                // DEBUG : afficher les clés
-                                if !viewModel.pendingParticipationsByRideId.isEmpty {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("DEBUG Participations en mémoire :")
-                                            .font(.caption.weight(.bold))
-                                            .foregroundColor(.yellow)
-
-                                        ForEach(Array(viewModel.pendingParticipationsByRideId.keys), id: \.self) { key in
-                                            let arr = viewModel.pendingParticipationsByRideId[key] ?? []
-                                            Text("• sortieId \(key): \(arr.count) participation(s)")
-                                                .font(.caption2)
-                                                .foregroundColor(.yellow)
-                                        }
-                                    }
-                                    .padding()
-                                    .background(Color.black.opacity(0.6))
-                                    .cornerRadius(8)
-                                }
                             }
                         }
                         .padding(.horizontal)

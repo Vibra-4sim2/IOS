@@ -590,29 +590,30 @@ private struct SinglePointMap: View {
         init(_ c: CLLocationCoordinate2D) { self.coord = c }
     }
 }
-
-// MARK: - Preview
-#Preview {
-    let data = """
-    {
-      "_id": "preview1",
-      "titre": "Balade test",
-      "description": "Aperçu de la sortie — description complète pour voir l'affichage dans la vue.",
-      "date": "2024-06-15T09:00:00.000Z",
-      "type": "VELO",
-      "option_camping": false,
-      "createurId": "creator1",
-      "photo": "https://picsum.photos/800/400",
-      "capacite": 12,
-      "distance": 12500,
-      "duree_estimee": 18000,
-      "pointDepart": { "latitude": 45.8326, "longitude": 6.8652 },
-      "pointArrivee": { "latitude": 45.9237, "longitude": 6.8694 },
-      "difficulte": "moyen",
-      "participantIds": ["u1","u2"]
-    }
-    """.data(using: .utf8)!
-    let ride = try! JSONDecoder().decode(Ride.self, from: data)
-    let creator = User(id: "creator1", firstName: "Mohamed", lastName: "Mami", gender: "M", email: "m@m.com", birthday: nil, avatar: nil, role: "USER", password: nil)
-    return NavigationStack { SortieDetailView(ride: ride, creator: creator) }
-}
+/*
+ // MARK: - Preview
+ #Preview {
+ let data = """
+ {
+ "_id": "preview1",
+ "titre": "Balade test",
+ "description": "Aperçu de la sortie — description complète pour voir l'affichage dans la vue.",
+ "date": "2024-06-15T09:00:00.000Z",
+ "type": "VELO",
+ "option_camping": false,
+ "createurId": "creator1",
+ "photo": "https://picsum.photos/800/400",
+ "capacite": 12,
+ "distance": 12500,
+ "duree_estimee": 18000,
+ "pointDepart": { "latitude": 45.8326, "longitude": 6.8652 },
+ "pointArrivee": { "latitude": 45.9237, "longitude": 6.8694 },
+ "difficulte": "moyen",
+ "participantIds": ["u1","u2"]
+ }
+ """.data(using: .utf8)!
+ let ride = try! JSONDecoder().decode(Ride.self, from: data)
+ let creator = User(id: "creator1", firstName: "Mohamed", lastName: "Mami", gender: "M", email: "m@m.com", birthday: nil, avatar: nil, role: "USER", password: nil)
+ NavigationStack { SortieDetailView(ride: ride, creator: creator) }
+ }
+ */

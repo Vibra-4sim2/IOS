@@ -83,6 +83,26 @@ final class PublicationService {
         }
     }
 
+    // MARK: - GET /publication/author/{authorId}
+    /// Get all publications created by a specific author (userId)
+    func getPublicationsByAuthor(authorId: String) async -> Result<[PublicationResponse], Error> {
+        do {
+            let url = baseURL.appendingPathComponent("publication/author/\(authorId)")
+            var request = URLRequest(url: url)
+            request.httpMethod = "GET"
+            applyCommonHeaders(to: &request)
+
+            print("🌐 GET \(request.url?.absoluteString ?? "")")
+            let (data, response) = try await URLSession.shared.data(for: request)
+            try validateResponse(response, data: data, expected: [200, 201, 304])
+            let decoded = try JSONDecoder().decode([PublicationResponse].self, from: data)
+            return .success(decoded)
+        } catch {
+            print("❌ getPublicationsByAuthor error: \(error)")
+            return .failure(error)
+        }
+    }
+
     // MARK: - POST /publication (multipart)
 
     func createPublication(
