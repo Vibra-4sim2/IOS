@@ -72,7 +72,9 @@ final class ChatsViewModel: ObservableObject {
 
     func isFromCurrentUser(_ message: ChatMessage) -> Bool {
         guard let uid = currentUserId else { return false }
-        return message.senderId == uid
+        if let sender = message.sender, sender.id == uid { return true }
+        if let sid = message.senderId, sid == uid { return true }
+        return false
     }
 
     // MARK: - LISTE
@@ -119,7 +121,7 @@ final class ChatsViewModel: ObservableObject {
         chatErrorMessage = nil
         do {
             let loaded = try await ChatService.shared.fetchMessages(sortieId: sortieId)
-            self.messages = loaded
+            self.messages = loaded.sorted { ($0.createdDate ?? .distantPast) < ($1.createdDate ?? .distantPast) }
         } catch {
             self.chatErrorMessage = "Erreur de chargement du chat: \(error.localizedDescription)"
             self.messages = []
@@ -136,10 +138,6 @@ final class ChatsViewModel: ObservableObject {
     }
 
     private func sendTextAsync(_ text: String, sortieId: String) async {
-        // Envoi via WebSocket (Socket.IO)
-        // L'affichage du message se fait UNIQUEMENT lorsque le serveur
-        // renvoie l'évènement .newMessage, afin d'éviter les doublons
-        // et de garantir que le message est bien accepté par le backend.
         guard let socketManager = socketManager else {
             self.chatErrorMessage = "Connexion temps réel non initialisée"
             return

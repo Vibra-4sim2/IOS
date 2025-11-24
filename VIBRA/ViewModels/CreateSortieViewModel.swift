@@ -162,7 +162,7 @@ final class CreateSortieViewModel: ObservableObject {
         isFetchingRoute = false
     }
     
-    // MARK: - Création Sortie + Camping
+    // MARK: - Création Sortie + Camping + Participation auto créateur (ACCEPTEE)
     
     func createSortieAndCamping() async {
         errorMessage = nil
@@ -265,7 +265,7 @@ final class CreateSortieViewModel: ObservableObject {
                 titre: titre,
                 description: description.isEmpty ? nil : description,
                 dateISO: isoFormatter.string(from: date),
-                typeUI: type,   // 🟢 on passe la valeur UI, le service fera le mapping vers l'enum backend
+                typeUI: type,
                 optionCamping: optionCamping,
                 photoData: photoData,
                 lieu: lieuSortie,
@@ -278,10 +278,51 @@ final class CreateSortieViewModel: ObservableObject {
                 campingJSON: campingJSON
             )
             
+            // ---------- Création de la sortie ----------
             let sortieResp = try await service.createSortieMultipart(sortiePayload)
-            successMessage = "Sortie créée avec succès (id: \(sortieResp._id))"
-            showSuccessAlert = true
             
+            #if DEBUG
+            print("[CreateSortieVM] Sortie créée: id=\(sortieResp._id)")
+            #endif
+            
+            // ---------- Récupérer userId depuis le JWT (même logique que Profile / MyRides) ----------
+            var currentUserId: String? = nil
+            do {
+                let token = try KeychainManager.shared.getJWT()
+                currentUserId = token.getUserIdFromJWT()
+            } catch {
+                #if DEBUG
+                print("[CreateSortieVM] Erreur lors de la récupération du JWT pour extraire userId:", error)
+                #endif
+            }
+            
+            // ---------- Création auto de la participation ACCEPTEE pour le créateur ----------
+            if let userId = currentUserId {
+                do {
+                    let participation = try await ParticipationService.shared.createAcceptedParticipationForCreator(
+                        userId: userId,
+                        sortieId: sortieResp._id
+                    )
+                    
+                    #if DEBUG
+                    print("[CreateSortieVM] Participation auto créée: user=\(participation.user?.id ?? "?") sortie=\(participation.sortie?.id ?? "?") status=\(participation.status ?? "?")")
+                    #endif
+                    
+                    successMessage = "Sortie créée avec succès (id: \(sortieResp._id)) et participation confirmée."
+                    showSuccessAlert = true
+                } catch {
+                    #if DEBUG
+                    print("[CreateSortieVM] Erreur création participation auto:", error)
+                    #endif
+                    successMessage = "Sortie créée avec succès (id: \(sortieResp._id)), mais la participation automatique n’a pas pu être créée."
+                    showSuccessAlert = true
+                }
+            } else {
+                successMessage = "Sortie créée avec succès (id: \(sortieResp._id)), mais la participation automatique n’a pas pu être créée (userId introuvable dans le JWT)."
+                showSuccessAlert = true
+            }
+            
+            // Reset du formulaire après la création
             resetForm()
             
         } catch let error as ValidationError {

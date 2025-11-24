@@ -36,9 +36,10 @@ struct ChatView: View {
             .ignoresSafeArea()
         )
         .navigationBarTitleDisplayMode(.inline)
-        //.toolbar(.hidden, for: .navigationBar)
         .preferredColorScheme(.dark)
     }
+
+    // MARK: - Header
 
     private var header: some View {
         HStack {
@@ -56,6 +57,8 @@ struct ChatView: View {
         .padding(.horizontal)
         .padding(.vertical, 8)
     }
+
+    // MARK: - Content
 
     @ViewBuilder
     private var contentArea: some View {
@@ -125,9 +128,62 @@ struct ChatView: View {
         }
     }
 
+    // MARK: - Helpers avatar & nom
+
+    private func displayName(for msg: ChatMessage) -> String? {
+        if let user = msg.sender, !user.displayName.isEmpty {
+            return user.displayName
+        }
+        return nil
+    }
+
+    @ViewBuilder
+    private func avatarView(for msg: ChatMessage, isMe: Bool) -> some View {
+        if let user = msg.sender,
+           let urlString = user.avatar,
+           let url = URL(string: urlString) {
+
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .empty:
+                    ProgressView()
+                        .frame(width: 32, height: 32)
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 32, height: 32)
+                        .clipShape(Circle())
+                case .failure(_):
+                    placeholderAvatar(initial: user.firstName?.first)
+                @unknown default:
+                    placeholderAvatar(initial: user.firstName?.first)
+                }
+            }
+            .frame(width: 32, height: 32)
+        } else {
+            let initial = msg.sender?.firstName?.first
+            placeholderAvatar(initial: initial)
+        }
+    }
+
+    private func placeholderAvatar(initial: Character?) -> some View {
+        let letter = initial.map { String($0).uppercased() } ?? "?"
+        return Circle()
+            .fill(AppColors.CardGlass)
+            .frame(width: 32, height: 32)
+            .overlay(
+                Text(letter)
+                    .font(.caption)
+                    .foregroundColor(AppColors.TextPrimary)
+            )
+    }
+
+    // MARK: - Message Row
+
     private func messageRow(_ msg: ChatMessage) -> some View {
-        if msg.isSystem {
-            return AnyView(
+        Group {
+            if msg.isSystem {
                 Text(msg.content ?? "")
                     .font(.caption)
                     .foregroundColor(AppColors.TextSecondary)
@@ -135,45 +191,61 @@ struct ChatView: View {
                     .background(AppColors.CardGlass)
                     .cornerRadius(8)
                     .frame(maxWidth: .infinity, alignment: .center)
-            )
-        }
+            } else {
+                let isMe = vm.isFromCurrentUser(msg)
+                let name = displayName(for: msg)
 
-        let isMe = vm.isFromCurrentUser(msg)
-
-        return AnyView(
-            HStack {
-                if isMe { Spacer(minLength: 40) }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    if let text = msg.content, !text.isEmpty {
-                        Text(text)
-                            .font(.subheadline)
-                            .foregroundColor(isMe ? .black : AppColors.TextPrimary)
-                    } else if msg.type == .image {
-                        Text("[Image]")
-                            .font(.caption)
-                            .foregroundColor(AppColors.TextSecondary)
+                HStack(alignment: .bottom, spacing: 8) {
+                    if !isMe {
+                        avatarView(for: msg, isMe: isMe)
                     } else {
-                        Text("[\(msg.type.rawValue)]")
-                            .font(.caption)
-                            .foregroundColor(AppColors.TextSecondary)
+                        Spacer(minLength: 40)
                     }
 
-                    if let date = msg.createdDate {
-                        Text(timeString(from: date))
-                            .font(.caption2)
-                            .foregroundColor(isMe ? Color.black.opacity(0.7) : AppColors.TextTertiary)
-                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    VStack(alignment: isMe ? .trailing : .leading, spacing: 4) {
+                        if !isMe, let name = name {
+                            Text(name)
+                                .font(.caption2)
+                                .foregroundColor(AppColors.TextTertiary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            if let text = msg.content, !text.isEmpty {
+                                Text(text)
+                                    .font(.subheadline)
+                                    .foregroundColor(isMe ? .black : AppColors.TextPrimary)
+                            } else if msg.type == .image {
+                                Text("[Image]")
+                                    .font(.caption)
+                                    .foregroundColor(AppColors.TextSecondary)
+                            } else {
+                                Text("[\(msg.type.rawValue)]")
+                                    .font(.caption)
+                                    .foregroundColor(AppColors.TextSecondary)
+                            }
+
+                            if let date = msg.createdDate {
+                                Text(timeString(from: date))
+                                    .font(.caption2)
+                                    .foregroundColor(isMe ? Color.black.opacity(0.7) : AppColors.TextTertiary)
+                                    .frame(maxWidth: .infinity, alignment: .trailing)
+                            }
+                        }
+                        .padding(10)
+                        .background(isMe ? AppColors.GreenAccent : AppColors.CardDark.opacity(0.9))
+                        .cornerRadius(16)
+                        .frame(maxWidth: .infinity, alignment: isMe ? .trailing : .leading)
+                    }
+
+                    if isMe {
+                        avatarView(for: msg, isMe: isMe)
+                    } else {
+                        Spacer(minLength: 40)
                     }
                 }
-                .padding(10)
-                .background(isMe ? AppColors.GreenAccent : AppColors.CardDark.opacity(0.9))
-                .cornerRadius(16)
-                .frame(maxWidth: .infinity, alignment: isMe ? .trailing : .leading)
-
-                if !isMe { Spacer(minLength: 40) }
             }
-        )
+        }
     }
 
     private func timeString(from date: Date) -> String {
@@ -182,6 +254,8 @@ struct ChatView: View {
         f.dateFormat = "HH:mm"
         return f.string(from: date)
     }
+
+    // MARK: - Typing & Input
 
     private var typingIndicator: some View {
         HStack {

@@ -196,4 +196,51 @@ final class ParticipationService {
                 throw ParticipationError.decoding(error)
             }
         }
+    /// Nouvelle fonction : crée une participation **ACCEPTEE** pour le créateur
+        /// sans toucher à createParticipation existant.
+        func createAcceptedParticipationForCreator(userId: String, sortieId: String) async throws -> Participation {
+            let urlString = "\(baseURL)/participations"
+            guard let url = URL(string: urlString) else { throw ParticipationError.badURL }
+
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+            guard let token = try? KeychainManager.shared.getJWT() else { throw ParticipationError.noToken }
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+            let body: [String: Any] = [
+                "sortieId": sortieId,
+                "userId": userId,
+                "status": "ACCEPTEE"
+            ]
+            request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                throw ParticipationError.invalidResponse(-1, "no http response")
+            }
+
+            let bodyString = String(data: data, encoding: .utf8) ?? "<no body>"
+            print("🛰 createAcceptedParticipationForCreator HTTP \(http.statusCode)")
+            print("🧪 RAW JSON:", bodyString)
+
+            guard (200...299).contains(http.statusCode) else {
+                throw ParticipationError.invalidResponse(http.statusCode, bodyString)
+            }
+
+            // On reconstruit un modèle Participation cohérent
+            let user = ParticipationUser(id: userId, email: nil)
+            let sortie = ParticipationSortie(id: sortieId, titre: nil, description: nil, createurId: nil)
+            let participation = Participation(
+                id: nil,
+                user: user,
+                sortie: sortie,
+                status: "ACCEPTEE",
+                createdAt: nil,
+                updatedAt: nil
+            )
+            return participation
+        }
 }

@@ -190,19 +190,41 @@ struct MyRidesHomeView: View {
                     }
                     Spacer()
 
-                    // BOUTON ACCEPTER
-                    Button {
-                        Task {
-                            await viewModel.acceptParticipation(p, forRideId: rideId)
+                    // BOUTONS REFUSER + ACCEPTER
+                    HStack(spacing: 8) {
+                        // BOUTON REFUSER
+                        Button {
+                            Task {
+                                await viewModel.refuseParticipation(p, forRideId: rideId)
+                                // ou si tu n'as qu'une fonction générique :
+                                // await viewModel.updateParticipation(p, to: "REFUSEE", forRideId: rideId)
+                            }
+                        } label: {
+                            Text("Refuser")
+                                .font(.caption2.bold())
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.red)
+                                .foregroundColor(.white)
+                                .cornerRadius(8)
                         }
-                    } label: {
-                        Text("Accepter")
-                            .font(.caption2.bold())
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(AppColors.GreenAccent)
-                            .foregroundColor(.black)
-                            .cornerRadius(8)
+
+                        // BOUTON ACCEPTER
+                        Button {
+                            Task {
+                                await viewModel.acceptParticipation(p, forRideId: rideId)
+                                // ou :
+                                // await viewModel.updateParticipation(p, to: "ACCEPTEE", forRideId: rideId)
+                            }
+                        } label: {
+                            Text("Accepter")
+                                .font(.caption2.bold())
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(AppColors.GreenAccent)
+                                .foregroundColor(.black)
+                                .cornerRadius(8)
+                        }
                     }
                 }
                 .padding(8)

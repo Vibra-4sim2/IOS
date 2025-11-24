@@ -24,35 +24,54 @@ struct ChatLocation: Codable {
     let name: String?
 }
 
-// DTO interne pour gérer senderId string OU objet
+// Représente un user envoyé dans senderId
+struct ChatUser: Codable, Equatable {
+    let id: String
+    let firstName: String?
+    let lastName: String?
+    let email: String?
+    let avatar: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id = "_id"
+        case firstName
+        case lastName
+        case email
+        case avatar
+    }
+
+    var displayName: String {
+        [firstName, lastName]
+            .compactMap { $0 }
+            .joined(separator: " ")
+    }
+}
+
+// DTO interne pour gérer senderId string OU objet user complet
 private struct SenderRef: Decodable {
     let id: String?
-
-    private struct SenderObject: Decodable {
-        let id: String?
-
-        enum CodingKeys: String, CodingKey {
-            case id = "_id"
-        }
-    }
+    let user: ChatUser?
 
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
 
-        // 1) Essayer comme string simple
+        // 1) Essayer comme string simple (id seul)
         if let str = try? container.decode(String.self) {
             self.id = str
+            self.user = nil
             return
         }
 
-        // 2) Essayer comme objet { "_id": "..." , ... }
-        if let obj = try? container.decode(SenderObject.self) {
+        // 2) Essayer comme objet user complet
+        if let obj = try? container.decode(ChatUser.self) {
             self.id = obj.id
+            self.user = obj
             return
         }
 
         // 3) Null / autre format : on met nil
         self.id = nil
+        self.user = nil
     }
 }
 
@@ -60,7 +79,8 @@ struct ChatMessage: Identifiable, Decodable {
     let id: String
     let chatId: String
     let sortieId: String
-    let senderId: String?         // toujours une String côté app
+    let senderId: String?        // id du user
+    let sender: ChatUser?        // infos complètes du user (nom + avatar)
     let type: ChatMessageType
     let content: String?
     let mediaUrl: String?
@@ -105,10 +125,12 @@ struct ChatMessage: Identifiable, Decodable {
         self.chatId = try container.decode(String.self, forKey: .chatId)
         self.sortieId = try container.decode(String.self, forKey: .sortieId)
 
-        if let sender = try? container.decodeIfPresent(SenderRef.self, forKey: .senderId) {
-            self.senderId = sender.id
+        if let senderRef = try? container.decodeIfPresent(SenderRef.self, forKey: .senderId) {
+            self.senderId = senderRef.id
+            self.sender = senderRef.user
         } else {
             self.senderId = nil
+            self.sender = nil
         }
 
         self.type = try container.decode(ChatMessageType.self, forKey: .type)
