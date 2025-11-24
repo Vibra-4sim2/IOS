@@ -105,6 +105,51 @@ final class SocketIOManager {
         socket?.emit("sendMessage", payload)
     }
     
+    /// Envoi d'un message média (image, vidéo, fichier, etc.)
+    /// Utilisé par ChatsViewModel.sendImage(...)
+    func sendMedia(
+        type: ChatMessageType,
+        mediaUrl: String,
+        thumbnailUrl: String?,
+        mediaDuration: Double?,
+        fileSize: Int?,
+        fileName: String?,
+        mimeType: String?,
+        sortieId: String
+    ) {
+        guard let currentSortieId = currentSortieId, currentSortieId == sortieId else {
+            print("⚠️ [SocketIO] sendMedia: sortieId courant manquant ou différent")
+            return
+        }
+        
+        var payload: [String: Any] = [
+            "sortieId": sortieId,
+            "type": type.rawValue,   // "image", "video", "file", etc. (doit matcher MessageType côté backend)
+            "mediaUrl": mediaUrl
+        ]
+        
+        if let thumbnailUrl = thumbnailUrl {
+            payload["thumbnailUrl"] = thumbnailUrl
+        }
+        if let mediaDuration = mediaDuration {
+            payload["mediaDuration"] = mediaDuration
+        }
+        if let fileSize = fileSize {
+            payload["fileSize"] = fileSize
+        }
+        if let fileName = fileName {
+            payload["fileName"] = fileName
+        }
+        if let mimeType = mimeType {
+            payload["mimeType"] = mimeType
+        }
+        
+        print("📤 [SocketIO] sendMedia payload:", payload)
+        // Le nom de l'event doit correspondre à ce que ton gateway NestJS écoute.
+        // Ici on réutilise "sendMessage" comme pour le texte.
+        socket?.emit("sendMessage", payload)
+    }
+    
     func joinCurrentRoom() {
         guard let sortieId = currentSortieId else { return }
         let payload: [String: Any] = ["sortieId": sortieId]

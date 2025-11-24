@@ -2,7 +2,7 @@
 //  ChatsListView.swift
 //  VIBRA
 //
-//  Liste des chats (sorties où l'utilisateur est ACCEPTÉ)
+//  Liste des chats (sorties de l'utilisateur)
 //
 
 import SwiftUI
@@ -67,7 +67,6 @@ struct ChatsListView: View {
                 .padding(.top, 12)
             }
             .navigationBarTitleDisplayMode(.inline)
-            //.toolbar(.hidden, for: .navigationBar)
             .preferredColorScheme(.dark)
         }
     }
@@ -75,20 +74,31 @@ struct ChatsListView: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack {
-            Text("Mes chats")
-                .font(.headline.weight(.semibold))
-                .foregroundColor(AppColors.TextPrimary)
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Mes chats")
+                    .font(.system(size: 22, weight: .semibold, design: .rounded))
+                    .foregroundColor(AppColors.TextPrimary)
+
+                Text("Conversations liées à tes sorties")
+                    .font(.caption)
+                    .foregroundColor(AppColors.TextSecondary)
+            }
 
             Spacer()
 
-            Text("\(vm.acceptedChats.count)")
-                .font(.caption2.weight(.bold))
-                .foregroundColor(.black)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(AppColors.GreenAccent)
-                .cornerRadius(10)
+            HStack(spacing: 6) {
+                Image(systemName: "bubble.left.and.bubble.right.fill")
+                    .font(.caption)
+                    .foregroundColor(.black)
+                Text("\(vm.acceptedChats.count)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundColor(.black)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(AppColors.GreenAccent)
+            .cornerRadius(12)
         }
         .padding(.horizontal)
     }
@@ -97,20 +107,36 @@ struct ChatsListView: View {
 
     private func chatRow(participation: Participation, sortie: ParticipationSortie) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            Circle()
-                .fill(AppColors.CardGlass)
-                .frame(width: 40, height: 40)
-                .overlay(
-                    Text(sortie.titre?.prefix(1).uppercased() ?? "S")
-                        .font(.headline.bold())
-                        .foregroundColor(AppColors.TextPrimary)
-                )
+            // Avatar de la sortie
+            ZStack {
+                Circle()
+                    .fill(AppColors.CardGlass)
+                Text(sortie.titre?.prefix(1).uppercased() ?? "S")
+                    .font(.headline.bold())
+                    .foregroundColor(AppColors.TextPrimary)
+            }
+            .frame(width: 44, height: 44)
+            .overlay(
+                Circle()
+                    .stroke(AppColors.DividerColor, lineWidth: 0.8)
+            )
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(sortie.titre ?? "Sortie")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundColor(AppColors.TextPrimary)
-                    .lineLimit(1)
+                HStack {
+                    Text(sortie.titre ?? "Sortie")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundColor(AppColors.TextPrimary)
+                        .lineLimit(1)
+
+                    Spacer()
+
+                    // Date courte si dispo
+                    if let dateText = participation.dateText {
+                        Text(dateText)
+                            .font(.caption2)
+                            .foregroundColor(AppColors.TextTertiary)
+                    }
+                }
 
                 if let desc = sortie.description, !desc.isEmpty {
                     Text(desc)
@@ -119,20 +145,33 @@ struct ChatsListView: View {
                         .lineLimit(2)
                 }
 
-                Text(participation.status ?? "")
-                    .font(.caption2)
-                    .foregroundColor(AppColors.GreenAccent)
+                // Ligne d’info en bas (ex: dernier message ou simple label)
+                HStack(spacing: 6) {
+                    Image(systemName: "message.fill")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(AppColors.GreenAccent)
+
+                    Text("Ouvrir la conversation")
+                        .font(.caption2)
+                        .foregroundColor(AppColors.GreenAccent)
+
+                    Spacer()
+                }
+                .padding(.top, 4)
             }
 
             Spacer()
         }
         .padding(10)
-        .background(AppColors.CardDark.opacity(0.9))
-        .cornerRadius(12)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(AppColors.CardDark.opacity(0.9))
+        )
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(AppColors.BorderColor, lineWidth: 0.6)
         )
+        .shadow(color: AppColors.ShadowColor.opacity(0.5), radius: 5, x: 0, y: 3)
     }
 
     // MARK: - States
@@ -150,7 +189,7 @@ struct ChatsListView: View {
                 .foregroundColor(.red)
                 .multilineTextAlignment(.center)
             Button {
-                vm.reloadList()   // ⬅️ ICI au lieu d'appeler loadList()
+                vm.reloadList()
             } label: {
                 Text("Réessayer")
                     .font(.subheadline.weight(.semibold))
@@ -189,11 +228,21 @@ struct ChatsListView: View {
             Text("Aucun chat")
                 .font(.headline)
                 .foregroundColor(AppColors.TextPrimary)
-            Text("Tu n'as pas encore de sorties acceptées avec un chat.")
+            Text("Tu n'as pas encore de conversations actives avec tes sorties.")
                 .font(.caption)
                 .foregroundColor(AppColors.TextSecondary)
+                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .padding()
+    }
+}
+
+// MARK: - Petite extension pour la date si tu la veux
+extension Participation {
+    var dateText: String? {
+        // Adapte selon ton modèle (ex: createdAt, updatedAt…)
+        // Ici juste un placeholder : retourne nil si pas de date
+        return nil
     }
 }

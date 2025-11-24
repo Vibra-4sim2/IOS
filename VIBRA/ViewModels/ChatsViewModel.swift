@@ -40,6 +40,7 @@ final class ChatsViewModel: ObservableObject {
     
     @Published var isWebSocketConnected: Bool = false
     @Published var isSomeoneTyping: Bool = false
+    @Published var isUploadingMedia: Bool = false   // pour upload image
 
     private var currentUserId: String?
     private var socketManager: SocketIOManager?
@@ -147,6 +148,51 @@ final class ChatsViewModel: ObservableObject {
         defer { isSending = false }
 
         socketManager.send(text: text)
+    }
+
+    /// Envoi d'une image :
+    /// 1) Upload vers /messages/upload
+    /// 2) Envoi du message de type image via Socket.IO
+    func sendImage(data: Data, fileName: String = "image.jpg", mimeType: String = "image/jpeg") {
+        guard case .chat = mode, let sortieId = chatSortieId else { return }
+        guard !isUploadingMedia else { return }
+
+        Task { await sendImageAsync(data: data, fileName: fileName, mimeType: mimeType, sortieId: sortieId) }
+    }
+
+    private func sendImageAsync(data: Data, fileName: String, mimeType: String, sortieId: String) async {
+        guard let socketManager = socketManager else {
+            self.chatErrorMessage = "Connexion temps réel non initialisée"
+            return
+        }
+
+        isUploadingMedia = true
+        defer { isUploadingMedia = false }
+
+        do {
+            // 1) Upload vers backend
+            let uploadResponse = try await ChatService.shared.uploadMedia(
+                fileData: data,
+                fileName: fileName,
+                mimeType: mimeType
+            )
+
+            // 2) Envoi du message image via Socket.IO
+            // À adapter selon l'implémentation exacte de SocketIOManager côté iOS / backend
+            socketManager.sendMedia(
+                type: .image,
+                mediaUrl: uploadResponse.url,
+                thumbnailUrl: nil,
+                mediaDuration: uploadResponse.duration,
+                fileSize: uploadResponse.size,
+                fileName: uploadResponse.originalName,
+                mimeType: uploadResponse.mimeType,
+                sortieId: sortieId
+            )
+
+        } catch {
+            self.chatErrorMessage = "Erreur lors de l'envoi de l'image: \(error.localizedDescription)"
+        }
     }
     
     // MARK: - Socket.IO

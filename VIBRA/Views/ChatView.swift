@@ -4,10 +4,12 @@
 //
 
 import SwiftUI
+import PhotosUI
 
 struct ChatView: View {
     @StateObject private var vm: ChatsViewModel
     @State private var inputText: String = ""
+    @State private var selectedPhoto: PhotosPickerItem?
 
     init(sortieId: String, sortieTitle: String?) {
         _vm = StateObject(wrappedValue: ChatsViewModel(mode: .chat(sortieId: sortieId, sortieTitle: sortieTitle)))
@@ -211,16 +213,47 @@ struct ChatView: View {
                         }
 
                         VStack(alignment: .leading, spacing: 4) {
-                            if let text = msg.content, !text.isEmpty {
+                            if let text = msg.content, !text.isEmpty, msg.type == .text {
                                 Text(text)
                                     .font(.subheadline)
                                     .foregroundColor(isMe ? .black : AppColors.TextPrimary)
+                            } else if msg.type == .image, let urlString = msg.mediaUrl, let url = URL(string: urlString) {
+                                AsyncImage(url: url) { phase in
+                                    switch phase {
+                                    case .empty:
+                                        ZStack {
+                                            Rectangle()
+                                                .fill(AppColors.CardGlass)
+                                                .frame(width: 200, height: 200)
+                                            ProgressView()
+                                                .tint(AppColors.GreenAccent)
+                                        }
+                                    case .success(let image):
+                                        image
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(maxWidth: 240, maxHeight: 240)
+                                            .clipped()
+                                            .cornerRadius(12)
+                                    case .failure(_):
+                                        ZStack {
+                                            Rectangle()
+                                                .fill(AppColors.CardGlass)
+                                                .frame(width: 200, height: 200)
+                                            Text("Impossible de charger l'image")
+                                                .font(.caption)
+                                                .foregroundColor(AppColors.TextSecondary)
+                                        }
+                                    @unknown default:
+                                        EmptyView()
+                                    }
+                                }
                             } else if msg.type == .image {
                                 Text("[Image]")
                                     .font(.caption)
                                     .foregroundColor(AppColors.TextSecondary)
                             } else {
-                                Text("[\(msg.type.rawValue)]")
+                                Text(msg.content ?? "[\(msg.type.rawValue)]")
                                     .font(.caption)
                                     .foregroundColor(AppColors.TextSecondary)
                             }
@@ -270,6 +303,18 @@ struct ChatView: View {
 
     private var inputBar: some View {
         HStack(spacing: 8) {
+            // Bouton image
+            PhotosPicker(
+                selection: $selectedPhoto,
+                matching: .images,
+                photoLibrary: .shared()
+            ) {
+                Image(systemName: "photo.on.rectangle")
+                    .foregroundColor(vm.isUploadingMedia ? AppColors.TextTertiary : AppColors.GreenAccent)
+                    .padding(8)
+            }
+            .disabled(vm.isUploadingMedia)
+
             TextField("Écrire un message…", text: $inputText, axis: .vertical)
                 .lineLimit(1...4)
                 .padding(8)
@@ -294,5 +339,27 @@ struct ChatView: View {
             Color.black.opacity(0.4)
                 .ignoresSafeArea(edges: .bottom)
         )
+        .onChange(of: selectedPhoto) { newValue in
+            Task {
+                await handleSelectedPhoto(newValue)
+            }
+        }
+    }
+
+    private func handleSelectedPhoto(_ item: PhotosPickerItem?) async {
+        guard let item = item else { return }
+        do {
+            if let data = try await item.loadTransferable(type: Data.self) {
+                // Mime type simplifié
+                let mimeType = "image/jpeg"
+                let fileName = "photo-\(Int(Date().timeIntervalSince1970)).jpg"
+                vm.sendImage(data: data, fileName: fileName, mimeType: mimeType)
+            }
+        } catch {
+            print("❌ handleSelectedPhoto error:", error)
+        }
+        await MainActor.run {
+            selectedPhoto = nil
+        }
     }
 }
