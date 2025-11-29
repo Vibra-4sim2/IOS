@@ -39,6 +39,10 @@ struct ChatView: View {
         )
         .navigationBarTitleDisplayMode(.inline)
         .preferredColorScheme(.dark)
+        .onDisappear {
+            vm.audioRecorder.cancelRecording()
+            vm.audioPlayer.stop()
+        }
     }
 
     // MARK: - Header
@@ -213,51 +217,10 @@ struct ChatView: View {
                         }
 
                         VStack(alignment: .leading, spacing: 4) {
-                            if let text = msg.content, !text.isEmpty, msg.type == .text {
-                                Text(text)
-                                    .font(.subheadline)
-                                    .foregroundColor(isMe ? .black : AppColors.TextPrimary)
-                            } else if msg.type == .image, let urlString = msg.mediaUrl, let url = URL(string: urlString) {
-                                AsyncImage(url: url) { phase in
-                                    switch phase {
-                                    case .empty:
-                                        ZStack {
-                                            Rectangle()
-                                                .fill(AppColors.CardGlass)
-                                                .frame(width: 200, height: 200)
-                                            ProgressView()
-                                                .tint(AppColors.GreenAccent)
-                                        }
-                                    case .success(let image):
-                                        image
-                                            .resizable()
-                                            .scaledToFill()
-                                            .frame(maxWidth: 240, maxHeight: 240)
-                                            .clipped()
-                                            .cornerRadius(12)
-                                    case .failure(_):
-                                        ZStack {
-                                            Rectangle()
-                                                .fill(AppColors.CardGlass)
-                                                .frame(width: 200, height: 200)
-                                            Text("Impossible de charger l'image")
-                                                .font(.caption)
-                                                .foregroundColor(AppColors.TextSecondary)
-                                        }
-                                    @unknown default:
-                                        EmptyView()
-                                    }
-                                }
-                            } else if msg.type == .image {
-                                Text("[Image]")
-                                    .font(.caption)
-                                    .foregroundColor(AppColors.TextSecondary)
-                            } else {
-                                Text(msg.content ?? "[\(msg.type.rawValue)]")
-                                    .font(.caption)
-                                    .foregroundColor(AppColors.TextSecondary)
-                            }
-
+                            // Contenu du message
+                            messageContentView(msg, isMe: isMe)
+                            
+                            // Timestamp
                             if let date = msg.createdDate {
                                 Text(timeString(from: date))
                                     .font(.caption2)
@@ -280,12 +243,161 @@ struct ChatView: View {
             }
         }
     }
+    
+    @ViewBuilder
+    private func messageContentView(_ msg: ChatMessage, isMe: Bool) -> some View {
+        switch msg.type {
+        case .text:
+            if let text = msg.content, !text.isEmpty {
+                Text(text)
+                    .font(.subheadline)
+                    .foregroundColor(isMe ? .black : AppColors.TextPrimary)
+            }
+            
+        case .image:
+            imageMessageView(msg)
+            
+        case .audio:
+            audioMessageView(msg, isMe: isMe)
+            
+        default:
+            Text("[\(msg.type.displayName)]")
+                .font(.caption)
+                .foregroundColor(AppColors.TextSecondary)
+        }
+    }
+    
+    private func imageMessageView(_ msg: ChatMessage) -> some View {
+        Group {
+            if let urlString = msg.mediaUrl, let url = URL(string: urlString) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        ZStack {
+                            Rectangle()
+                                .fill(AppColors.CardGlass)
+                                .frame(width: 200, height: 200)
+                            ProgressView()
+                                .tint(AppColors.GreenAccent)
+                        }
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                            .frame(maxWidth: 240, maxHeight: 240)
+                            .clipped()
+                            .cornerRadius(12)
+                    case .failure(_):
+                        ZStack {
+                            Rectangle()
+                                .fill(AppColors.CardGlass)
+                                .frame(width: 200, height: 200)
+                            Text("Impossible de charger l'image")
+                                .font(.caption)
+                                .foregroundColor(AppColors.TextSecondary)
+                        }
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+            } else {
+                Text("[Image]")
+                    .font(.caption)
+                    .foregroundColor(AppColors.TextSecondary)
+            }
+        }
+    }
+    
+    private func audioMessageView(_ msg: ChatMessage, isMe: Bool) -> some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 12) {
+                // Bouton play/pause avec loading
+                Button {
+                    if let urlString = msg.mediaUrl, let url = URL(string: urlString) {
+                        if vm.audioPlayer.isPlayingMessage(msg.id ?? "") {
+                            vm.pauseAudio()
+                        } else {
+                            vm.playAudio(url: url, messageId: msg.id ?? "")
+                        }
+                    }
+                } label: {
+                    ZStack {
+                        if vm.audioPlayer.isLoading && vm.audioPlayer.currentlyPlayingId == msg.id {
+                            ProgressView()
+                                .tint(isMe ? .black : AppColors.GreenAccent)
+                        } else {
+                            Image(systemName: vm.audioPlayer.isPlayingMessage(msg.id ?? "") ? "pause.circle.fill" : "play.circle.fill")
+                                .font(.system(size: 32))
+                                .foregroundColor(isMe ? .black : AppColors.GreenAccent)
+                        }
+                    }
+                    .frame(width: 32, height: 32)
+                }
+                .disabled(vm.audioPlayer.isLoading)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    // Waveform placeholder
+                    HStack(spacing: 2) {
+                        ForEach(0..<20, id: \.self) { i in
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(isMe ? Color.black.opacity(0.3) : AppColors.TextSecondary)
+                                .frame(width: 3, height: CGFloat.random(in: 8...24))
+                        }
+                    }
+                    .frame(height: 24)
+                    
+                    // Durée
+                    if let duration = msg.mediaDuration {
+                        let currentTime = vm.audioPlayer.currentlyPlayingId == msg.id ? vm.audioPlayer.currentTime : 0
+                        let displayTime = currentTime > 0 ? currentTime : duration
+                        
+                        Text(formatDuration(displayTime))
+                            .font(.caption2)
+                            .foregroundColor(isMe ? Color.black.opacity(0.7) : AppColors.TextTertiary)
+                    }
+                }
+            }
+            
+            // Progress bar pour la lecture
+            if vm.audioPlayer.currentlyPlayingId == msg.id, let duration = msg.mediaDuration, duration > 0 {
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        // Background
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(isMe ? Color.black.opacity(0.2) : AppColors.CardGlass)
+                            .frame(height: 4)
+                        
+                        // Progress
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(isMe ? Color.black : AppColors.GreenAccent)
+                            .frame(width: geometry.size.width * CGFloat(vm.audioPlayer.currentTime / duration), height: 4)
+                    }
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                let progress = value.location.x / geometry.size.width
+                                let newTime = Double(progress) * duration
+                                vm.seekAudio(to: max(0, min(newTime, duration)))
+                            }
+                    )
+                }
+                .frame(height: 4)
+            }
+        }
+        .frame(maxWidth: 240)
+    }
 
     private func timeString(from date: Date) -> String {
         let f = DateFormatter()
         f.locale = Locale(identifier: "fr_FR")
         f.dateFormat = "HH:mm"
         return f.string(from: date)
+    }
+    
+    private func formatDuration(_ seconds: TimeInterval) -> String {
+        let mins = Int(seconds) / 60
+        let secs = Int(seconds) % 60
+        return String(format: "%d:%02d", mins, secs)
     }
 
     // MARK: - Typing & Input
@@ -302,39 +414,88 @@ struct ChatView: View {
     }
 
     private var inputBar: some View {
-        HStack(spacing: 8) {
-            // Bouton image
-            PhotosPicker(
-                selection: $selectedPhoto,
-                matching: .images,
-                photoLibrary: .shared()
-            ) {
-                Image(systemName: "photo.on.rectangle")
-                    .foregroundColor(vm.isUploadingMedia ? AppColors.TextTertiary : AppColors.GreenAccent)
-                    .padding(8)
+        VStack(spacing: 0) {
+            // Recording indicator
+            if vm.audioRecorder.isRecording {
+                recordingIndicator
+                    .onAppear {
+                        print("📺 [ChatView] Recording indicator appeared")
+                    }
             }
-            .disabled(vm.isUploadingMedia)
+            
+            HStack(spacing: 8) {
+                // Bouton image
+                PhotosPicker(
+                    selection: $selectedPhoto,
+                    matching: .images,
+                    photoLibrary: .shared()
+                ) {
+                    Image(systemName: "photo.on.rectangle")
+                        .foregroundColor(vm.isUploadingMedia ? AppColors.TextTertiary : AppColors.GreenAccent)
+                        .padding(8)
+                }
+                .disabled(vm.isUploadingMedia || vm.audioRecorder.isRecording)
 
-            TextField("Écrire un message…", text: $inputText, axis: .vertical)
-                .lineLimit(1...4)
-                .padding(8)
-                .background(AppColors.CardGlass)
-                .cornerRadius(16)
-                .foregroundColor(AppColors.TextPrimary)
+                // Input texte ou bouton micro
+                if vm.audioRecorder.isRecording {
+                    // Mode enregistrement
+                    recordingControls
+                        .onAppear {
+                            print("📺 [ChatView] Recording controls appeared")
+                        }
+                } else {
+                    // Mode normal
+                    TextField("Écrire un message…", text: $inputText, axis: .vertical)
+                        .lineLimit(1...4)
+                        .padding(8)
+                        .background(AppColors.CardGlass)
+                        .cornerRadius(16)
+                        .foregroundColor(AppColors.TextPrimary)
+                }
 
-            Button {
-                let text = inputText
-                inputText = ""
-                vm.sendText(text)
-            } label: {
-                Image(systemName: vm.isSending ? "paperplane.fill" : "paperplane")
-                    .foregroundColor(AppColors.GreenAccent)
-                    .padding(8)
+                // Bouton envoi ou micro
+                if inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !vm.audioRecorder.isRecording {
+                    // Bouton micro
+                    Button {
+                        print("🔘 [ChatView] Micro button tapped")
+                        print("🔘 [ChatView] isRecording:", vm.audioRecorder.isRecording)
+                        print("🔘 [ChatView] hasPermission:", vm.audioRecorder.hasPermission)
+                        
+                        Task {
+                            if !vm.audioRecorder.hasPermission {
+                                print("🔘 [ChatView] Requesting permission...")
+                                await vm.audioRecorder.requestPermission()
+                            }
+                            if vm.audioRecorder.hasPermission {
+                                print("🔘 [ChatView] Starting recording...")
+                                vm.startRecordingAudio()
+                            } else {
+                                print("❌ [ChatView] Permission denied")
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "mic.fill")
+                            .foregroundColor(AppColors.GreenAccent)
+                            .padding(8)
+                    }
+                    .disabled(vm.audioRecorder.isRecording || vm.isUploadingMedia)
+                } else if !vm.audioRecorder.isRecording {
+                    // Bouton envoi texte
+                    Button {
+                        let text = inputText
+                        inputText = ""
+                        vm.sendText(text)
+                    } label: {
+                        Image(systemName: vm.isSending ? "paperplane.fill" : "paperplane")
+                            .foregroundColor(AppColors.GreenAccent)
+                            .padding(8)
+                    }
+                    .disabled(vm.isSending)
+                }
             }
-            .disabled(vm.isSending || inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .padding(.horizontal)
+            .padding(.vertical, 8)
         }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
         .background(
             Color.black.opacity(0.4)
                 .ignoresSafeArea(edges: .bottom)
@@ -345,12 +506,64 @@ struct ChatView: View {
             }
         }
     }
+    
+    private var recordingControls: some View {
+        HStack {
+            Button {
+                vm.cancelRecordingAudio()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundColor(.red)
+                    .font(.title2)
+            }
+            
+            Spacer()
+            
+            // Timer
+            Text(formatDuration(vm.audioRecorder.recordingDuration))
+                .font(.headline)
+                .foregroundColor(AppColors.GreenAccent)
+                .monospacedDigit()
+            
+            // Animation recording
+            Circle()
+                .fill(Color.red)
+                .frame(width: 8, height: 8)
+                .opacity(vm.audioRecorder.isRecording ? 1 : 0)
+                .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: vm.audioRecorder.isRecording)
+            
+            Spacer()
+            
+            Button {
+                vm.sendRecordedAudio()
+            } label: {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(AppColors.GreenAccent)
+                    .font(.title2)
+            }
+        }
+        .padding(8)
+        .background(AppColors.CardGlass)
+        .cornerRadius(16)
+    }
+    
+    private var recordingIndicator: some View {
+        HStack {
+            Image(systemName: "waveform")
+                .foregroundColor(.red)
+            Text("Enregistrement en cours...")
+                .font(.caption)
+                .foregroundColor(AppColors.TextSecondary)
+            Spacer()
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 4)
+    }
 
     private func handleSelectedPhoto(_ item: PhotosPickerItem?) async {
         guard let item = item else { return }
         do {
             if let data = try await item.loadTransferable(type: Data.self) {
-                // Mime type simplifié
                 let mimeType = "image/jpeg"
                 let fileName = "photo-\(Int(Date().timeIntervalSince1970)).jpg"
                 vm.sendImage(data: data, fileName: fileName, mimeType: mimeType)

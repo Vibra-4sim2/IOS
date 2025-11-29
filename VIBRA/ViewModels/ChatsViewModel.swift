@@ -40,13 +40,28 @@ final class ChatsViewModel: ObservableObject {
     
     @Published var isWebSocketConnected: Bool = false
     @Published var isSomeoneTyping: Bool = false
-    @Published var isUploadingMedia: Bool = false   // pour upload image
+    @Published var isUploadingMedia: Bool = false
+    
+    // Audio recorder & player
+    var audioRecorder = AudioRecorderManager()
+    var audioPlayer = AudioPlayerManager()
+    
+    private var cancellables = Set<AnyCancellable>()
 
     private var currentUserId: String?
     private var socketManager: SocketIOManager?
 
     init(mode: Mode) {
         self.mode = mode
+        
+        // Observer les changements du recorder et player pour forcer la mise à jour de la vue
+        audioRecorder.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }.store(in: &cancellables)
+        
+        audioPlayer.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }.store(in: &cancellables)
 
         switch mode {
         case .list:
@@ -62,6 +77,8 @@ final class ChatsViewModel: ObservableObject {
     
     deinit {
         socketManager?.disconnect()
+        // Le nettoyage audio sera fait automatiquement par ARC
+        // ou peut être géré dans onDisappear de la vue
     }
 
     var navigationTitle: String {
@@ -130,6 +147,8 @@ final class ChatsViewModel: ObservableObject {
         isLoadingChat = false
     }
 
+    // MARK: - Envoi message texte
+    
     func sendText(_ text: String) {
         guard case .chat = mode, let sortieId = chatSortieId else { return }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -150,9 +169,8 @@ final class ChatsViewModel: ObservableObject {
         socketManager.send(text: text)
     }
 
-    /// Envoi d'une image :
-    /// 1) Upload vers /messages/upload
-    /// 2) Envoi du message de type image via Socket.IO
+    // MARK: - Envoi image
+    
     func sendImage(data: Data, fileName: String = "image.jpg", mimeType: String = "image/jpeg") {
         guard case .chat = mode, let sortieId = chatSortieId else { return }
         guard !isUploadingMedia else { return }
@@ -170,15 +188,12 @@ final class ChatsViewModel: ObservableObject {
         defer { isUploadingMedia = false }
 
         do {
-            // 1) Upload vers backend
             let uploadResponse = try await ChatService.shared.uploadMedia(
                 fileData: data,
                 fileName: fileName,
                 mimeType: mimeType
             )
 
-            // 2) Envoi du message image via Socket.IO
-            // À adapter selon l'implémentation exacte de SocketIOManager côté iOS / backend
             socketManager.sendMedia(
                 type: .image,
                 mediaUrl: uploadResponse.url,
@@ -193,6 +208,119 @@ final class ChatsViewModel: ObservableObject {
         } catch {
             self.chatErrorMessage = "Erreur lors de l'envoi de l'image: \(error.localizedDescription)"
         }
+    }
+    
+    // MARK: - Envoi audio (message vocal)
+    
+    func startRecordingAudio() {
+        print("🎤 [ChatsViewModel] startRecordingAudio called")
+        print("🎤 [ChatsViewModel] hasPermission:", audioRecorder.hasPermission)
+        print("🎤 [ChatsViewModel] isRecording BEFORE:", audioRecorder.isRecording)
+        
+        // IMPORTANT: Vérifier AVANT d'essayer d'enregistrer
+        guard !audioRecorder.isRecording else {
+            print("⚠️ [ChatsViewModel] Already recording, ignoring")
+            return
+        }
+        
+        do {
+            _ = try audioRecorder.startRecording()
+            print("✅ [ChatsViewModel] Recording started successfully")
+            print("🎤 [ChatsViewModel] isRecording AFTER:", audioRecorder.isRecording)
+        } catch {
+            print("❌ [ChatsViewModel] Recording error:", error)
+            self.chatErrorMessage = "Erreur d'enregistrement: \(error.localizedDescription)"
+        }
+    }
+    
+    func cancelRecordingAudio() {
+        audioRecorder.cancelRecording()
+    }
+    
+    func sendRecordedAudio() {
+        guard case .chat = mode, let sortieId = chatSortieId else { return }
+        guard let result = audioRecorder.stopRecording() else { return }
+        
+        let fileURL = result.url
+        let duration = result.duration
+        
+        // Validation
+        do {
+            try audioRecorder.validateRecording(url: fileURL, duration: duration)
+        } catch {
+            self.chatErrorMessage = error.localizedDescription
+            return
+        }
+        
+        Task {
+            await sendAudioAsync(fileURL: fileURL, duration: duration, sortieId: sortieId)
+        }
+    }
+    
+    private func sendAudioAsync(fileURL: URL, duration: TimeInterval, sortieId: String) async {
+        guard let socketManager = socketManager else {
+            self.chatErrorMessage = "Connexion temps réel non initialisée"
+            return
+        }
+        
+        isUploadingMedia = true
+        defer { isUploadingMedia = false }
+        
+        do {
+            // Lecture du fichier
+            let audioData = try Data(contentsOf: fileURL)
+            let fileName = fileURL.lastPathComponent
+            let mimeType = "audio/mp4" // Format M4A/AAC
+            
+            // Upload vers backend
+            let uploadResponse = try await ChatService.shared.uploadMedia(
+                fileData: audioData,
+                fileName: fileName,
+                mimeType: mimeType
+            )
+            
+            // Envoi du message audio via Socket.IO
+            socketManager.sendMedia(
+                type: .audio,
+                mediaUrl: uploadResponse.url,
+                thumbnailUrl: nil,
+                mediaDuration: duration,
+                fileSize: uploadResponse.size,
+                fileName: uploadResponse.originalName,
+                mimeType: uploadResponse.mimeType,
+                sortieId: sortieId
+            )
+            
+            // Nettoyage du fichier temporaire
+            try? FileManager.default.removeItem(at: fileURL)
+            
+        } catch {
+            self.chatErrorMessage = "Erreur lors de l'envoi du message vocal: \(error.localizedDescription)"
+        }
+    }
+    
+    // MARK: - Lecture audio
+    
+    func playAudio(url: URL, messageId: String) {
+        Task {
+            do {
+                try await audioPlayer.play(url: url, messageId: messageId)
+            } catch {
+                self.chatErrorMessage = "Erreur de lecture: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    func pauseAudio() {
+        audioPlayer.pause()
+    }
+    
+    func stopAudio() {
+        audioPlayer.stop()
+    }
+    
+    func seekAudio(to time: TimeInterval) {
+        audioPlayer.seek(to: time)
     }
     
     // MARK: - Socket.IO

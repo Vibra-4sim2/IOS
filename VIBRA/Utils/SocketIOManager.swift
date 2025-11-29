@@ -98,15 +98,14 @@ final class SocketIOManager {
         
         let payload: [String: Any] = [
             "sortieId": sortieId,
-            "type": "text", // MessageType.TEXT = 'text' côté backend
+            "type": "text",
             "content": trimmed
         ]
         print("📤 [SocketIO] sendMessage payload:", payload)
         socket?.emit("sendMessage", payload)
     }
     
-    /// Envoi d'un message média (image, vidéo, fichier, etc.)
-    /// Utilisé par ChatsViewModel.sendImage(...)
+    /// Envoi d'un message média (image, vidéo, audio, fichier, etc.)
     func sendMedia(
         type: ChatMessageType,
         mediaUrl: String,
@@ -124,7 +123,7 @@ final class SocketIOManager {
         
         var payload: [String: Any] = [
             "sortieId": sortieId,
-            "type": type.rawValue,   // "image", "video", "file", etc. (doit matcher MessageType côté backend)
+            "type": type.rawValue,
             "mediaUrl": mediaUrl
         ]
         
@@ -145,8 +144,6 @@ final class SocketIOManager {
         }
         
         print("📤 [SocketIO] sendMedia payload:", payload)
-        // Le nom de l'event doit correspondre à ce que ton gateway NestJS écoute.
-        // Ici on réutilise "sendMessage" comme pour le texte.
         socket?.emit("sendMessage", payload)
     }
     
@@ -205,7 +202,7 @@ final class SocketIOManager {
         socket.on(clientEvent: .reconnectAttempt) { [weak self] data, _ in
             guard let self = self else { return }
             let attempt = data.first as? Int ?? -1
-            print("🔁 [SocketIO] .reconnectAttempt:", attempt)
+            print("🔄 [SocketIO] .reconnectAttempt:", attempt)
             DispatchQueue.main.async {
                 self.onEvent?(.reconnecting(attempt))
             }
@@ -229,7 +226,7 @@ final class SocketIOManager {
     
     private func setupChatHandlers(socket: SocketIOClient) {
         socket.on("joinedRoom") { [weak self] data, _ in
-            print("📥 [SocketIO] event 'joinedRoom' raw:", data)
+            print("🔥 [SocketIO] event 'joinedRoom' raw:", data)
             guard
                 let self = self,
                 let dict = data.first as? [String: Any],
@@ -252,7 +249,7 @@ final class SocketIOManager {
         }
         
         socket.on("receiveMessage") { [weak self] data, _ in
-            print("📥 [SocketIO] event 'receiveMessage' raw:", data)
+            print("🔥 [SocketIO] event 'receiveMessage' raw:", data)
             guard
                 let self = self,
                 let dict = data.first as? [String: Any],
@@ -275,7 +272,7 @@ final class SocketIOManager {
         }
         
         socket.on("userTyping") { [weak self] data, _ in
-            print("📥 [SocketIO] event 'userTyping' raw:", data)
+            print("🔥 [SocketIO] event 'userTyping' raw:", data)
             guard
                 let self = self,
                 let dict = data.first as? [String: Any],
@@ -290,7 +287,7 @@ final class SocketIOManager {
         }
         
         socket.on("messageRead") { [weak self] data, _ in
-            print("📥 [SocketIO] event 'messageRead' raw:", data)
+            print("🔥 [SocketIO] event 'messageRead' raw:", data)
             guard
                 let self = self,
                 let dict = data.first as? [String: Any],
@@ -305,7 +302,7 @@ final class SocketIOManager {
         }
         
         socket.on("onlineUsers") { [weak self] data, _ in
-            print("📥 [SocketIO] event 'onlineUsers' raw:", data)
+            print("🔥 [SocketIO] event 'onlineUsers' raw:", data)
             guard
                 let self = self,
                 let dict = data.first as? [String: Any],
@@ -320,7 +317,7 @@ final class SocketIOManager {
         }
         
         socket.on("error") { [weak self] data, _ in
-            print("📥 [SocketIO] event 'error' raw:", data)
+            print("🔥 [SocketIO] event 'error' raw:", data)
             guard
                 let self = self,
                 let dict = data.first as? [String: Any],
