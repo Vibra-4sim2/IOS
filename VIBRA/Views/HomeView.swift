@@ -28,7 +28,7 @@ struct HomeView: View {
                     // 🚴‍♂️ Filtre activité (Randonnée / Vélo)
                     activityFilterBar
 
-                    // 📝 Boutons principaux (Followers / Recommendation / Explore)
+                    // 🔍 Boutons principaux (Followers / Recommendation / Explore)
                     mainFilterBar
 
                     // 📋 Liste des sorties
@@ -149,6 +149,9 @@ struct HomeView: View {
                 isSelected: viewModel.selectedTab == "Followers"
             ) {
                 viewModel.selectedTab = "Followers"
+                Task {
+                    await viewModel.onTabChange()
+                }
             }
 
             FilterButton(
@@ -156,6 +159,9 @@ struct HomeView: View {
                 isSelected: viewModel.selectedTab == "Recommendation"
             ) {
                 viewModel.selectedTab = "Recommendation"
+                Task {
+                    await viewModel.onTabChange()
+                }
             }
 
             FilterButton(
@@ -163,6 +169,9 @@ struct HomeView: View {
                 isSelected: viewModel.selectedTab == "Explore"
             ) {
                 viewModel.selectedTab = "Explore"
+                Task {
+                    await viewModel.onTabChange()
+                }
             }
         }
         .padding(.horizontal)
@@ -207,15 +216,19 @@ struct HomeView: View {
     // MARK: - Empty State
     private var emptyStateView: some View {
         VStack(spacing: 10) {
-            Image(systemName: "tray.fill")
+            Image(systemName: viewModel.selectedTab == "Recommendation" ? "star.fill" : "tray.fill")
                 .font(.largeTitle)
                 .foregroundColor(AppColors.TextTertiary)
-            Text("Aucune sortie trouvée")
+            Text(viewModel.selectedTab == "Recommendation" ? "Aucune recommandation" : "Aucune sortie trouvée")
                 .foregroundColor(AppColors.TextPrimary)
                 .font(.headline)
-            Text("Essaie de modifier ta recherche ou tes filtres")
+            Text(viewModel.selectedTab == "Recommendation"
+                 ? "Participe à plus de sorties pour obtenir des recommandations personnalisées"
+                 : "Essaie de modifier ta recherche ou tes filtres")
                 .foregroundColor(AppColors.TextSecondary)
                 .font(.caption)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
         }
         .padding()
         .background(AppColors.CardDark.opacity(0.9))
@@ -314,4 +327,3 @@ struct HomeView_Previews: PreviewProvider {
             .preferredColorScheme(.dark)
     }
 }
-

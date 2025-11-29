@@ -15,6 +15,16 @@ final class HomeViewModel: ObservableObject {
     @Published var selectedTab: String = "Explore"        // "Followers", "Recommendation", "Explore"
     @Published var selectedActivity: String = "All"       // "All", "Randonnée", "Vélo"
 
+    // 🆕 ID de l'utilisateur connecté
+    private var currentUserId: String? {
+        // D'abord essayer UserDefaults (plus rapide)
+        if let userId = JWTHelper.getUserIdFromUserDefaults() {
+            return userId
+        }
+        // Sinon, décoder depuis le JWT
+        return JWTHelper.getUserIdFromToken()
+    }
+
     // 🔎 Liste filtrée utilisée par la vue
     var filteredItems: [RideWithCreator] {
         var result = items
@@ -29,20 +39,9 @@ final class HomeViewModel: ObservableObject {
             break
         }
 
-        // 2) Filtre par onglet (Followers / Recommendation / Explore)
-        switch selectedTab {
-        case "Followers":
-            // TODO: si tu as une logique backend de "follow", branche-la ici.
-            // Pour l'instant on laisse tout, ou on appliquera plus tard un filtre spécifique.
-            break
-        case "Recommendation":
-            // TODO: tu peux trier/filtrer par pertinence, popularité, etc.
-            break
-        case "Explore":
-            break
-        default:
-            break
-        }
+        // 2) Note: Le filtre par onglet (Followers / Recommendation / Explore)
+        // est maintenant géré au niveau du chargement des données
+        // On ne filtre plus ici, car les données sont déjà filtrées par la source
 
         // 3) Filtre par texte (titre, description, nom de créateur)
         let text = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -59,8 +58,23 @@ final class HomeViewModel: ObservableObject {
         return result
     }
 
+    // 🔄 Fonction principale de chargement (appelée quand l'onglet change)
     func load() async {
-        print("🔄 HomeViewModel: Starting to load rides...")
+        switch selectedTab {
+        case "Followers":
+            await loadFollowersRides()
+        case "Recommendation":
+            await loadRecommendedRides()
+        case "Explore":
+            await loadAllRides()
+        default:
+            await loadAllRides()
+        }
+    }
+
+    // 📋 Charger toutes les sorties (Explore)
+    private func loadAllRides() async {
+        print("🔄 HomeViewModel: Loading all rides (Explore)...")
         isLoading = true
         errorMessage = nil
         do {
@@ -73,5 +87,48 @@ final class HomeViewModel: ObservableObject {
             self.items = []
         }
         isLoading = false
+    }
+
+    // ⭐ Charger les sorties recommandées
+    private func loadRecommendedRides() async {
+        print("⭐ HomeViewModel: Loading recommended rides...")
+        
+        guard let userId = currentUserId else {
+            print("⚠️ HomeViewModel: No user ID found, cannot load recommendations")
+            self.errorMessage = "Connectez-vous pour voir vos recommandations personnalisées"
+            self.items = []
+            return
+        }
+        
+        isLoading = true
+        errorMessage = nil
+        do {
+            let fetched = try await HomeService.shared.fetchRecommendedRidesWithCreators(userId: userId)
+            print("✅ HomeViewModel: Successfully fetched \(fetched.count) recommended rides")
+            self.items = fetched
+        } catch APIError.invalidResponse(401) {
+            print("❌ HomeViewModel: Authentication error (401)")
+            self.errorMessage = "Session expirée. Veuillez vous reconnecter."
+            self.items = []
+        } catch {
+            print("❌ HomeViewModel: Error loading recommended rides - \(error)")
+            self.errorMessage = "Erreur de chargement des recommandations: \(error.localizedDescription)"
+            self.items = []
+        }
+        isLoading = false
+    }
+
+    // 👥 Charger les sorties des personnes suivies
+    private func loadFollowersRides() async {
+        print("👥 HomeViewModel: Loading followers rides...")
+        // TODO: Implémenter la logique pour charger les sorties des personnes suivies
+        // Pour l'instant, on charge toutes les sorties
+        // Vous devrez créer une route API dédiée pour cela
+        await loadAllRides()
+    }
+
+    // 🔄 Recharger les données quand l'onglet change
+    func onTabChange() async {
+        await load()
     }
 }
