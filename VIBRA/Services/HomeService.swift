@@ -106,9 +106,9 @@ final class HomeService {
 
             let decoder = JSONDecoder()
             decoder.keyDecodingStrategy = .convertFromSnakeCase
-            let rides = try decoder.decode([Ride].self, from: data)
-            print("✅ HomeService: Successfully decoded \(rides.count) recommended rides")
-            return rides
+            let recommendationsResponse = try decoder.decode(RecommendationsResponse.self, from: data)
+            print("✅ HomeService: Successfully decoded \(recommendationsResponse.recommendations.count) recommended rides for user cluster \(recommendationsResponse.userCluster ?? -1)")
+            return recommendationsResponse.recommendations
         } catch let error as DecodingError {
             print("❌ HomeService: Decoding error - \(error)")
             throw APIError.decodingFailed(error)
