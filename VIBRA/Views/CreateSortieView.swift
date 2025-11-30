@@ -1,5 +1,5 @@
 //
-//  CreateSortieView.swift
+//  CreateSortieView.swift (Partie 1/2)
 //  VIBRA
 //
 
@@ -17,6 +17,8 @@ struct CreateSortieView: View {
     )
     @State private var isSelectingStart = true
     @State private var currentStep = 1
+    @State private var showDepartSuggestions = false
+    @State private var showArriveeSuggestions = false
     
     var body: some View {
         NavigationView {
@@ -71,6 +73,9 @@ struct CreateSortieView: View {
             }, message: {
                 Text(viewModel.successMessage ?? "Opération réussie.")
             })
+            .onAppear {
+                viewModel.requestLocationPermission()
+            }
         }
     }
     
@@ -217,20 +222,64 @@ struct CreateSortieView: View {
         }
     }
     
-    // MARK: - Step 2: Itinéraire
+    // MARK: - Step 2: Itinéraire (avec recherche améliorée)
     
     private var step2Content: some View {
         ScrollView {
             VStack(spacing: 20) {
                 styledGroupBox(title: "Itinéraire", systemImage: "map") {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Choisissez le point de départ et d'arrivée sur la carte, puis calculez l'itinéraire.")
+                        Text("Recherchez des adresses ou tapez sur la carte pour définir votre itinéraire.")
                             .font(.footnote)
                             .foregroundColor(AppColors.TextTertiary)
 
-                        HStack {
-                            vibraTextField("Adresse départ (optionnel)", text: $viewModel.departAddressText)
-                            vibraTextField("Adresse arrivée (optionnel)", text: $viewModel.arriveeAddressText)
+                        // Champs de recherche avec autocomplétion
+                        VStack(spacing: 12) {
+                            // Recherche départ
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Image(systemName: "mappin.circle.fill")
+                                        .foregroundColor(AppColors.GreenAccent)
+                                    TextField("Rechercher point de départ", text: $viewModel.departAddressText)
+                                        .modifier(VibraFieldModifier())
+                                        .onChange(of: viewModel.departAddressText) { _ in
+                                            showDepartSuggestions = !viewModel.departAddressText.isEmpty
+                                        }
+                                }
+                                
+                                if showDepartSuggestions && !viewModel.departSearchResults.isEmpty {
+                                    SearchSuggestionsView(
+                                        results: viewModel.departSearchResults,
+                                        onSelect: { item in
+                                            viewModel.selectDepartureAddress(item)
+                                            showDepartSuggestions = false
+                                        }
+                                    )
+                                }
+                            }
+                            
+                            // Recherche arrivée
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Image(systemName: "mappin.circle")
+                                        .foregroundColor(AppColors.TealAccent)
+                                    TextField("Rechercher point d'arrivée", text: $viewModel.arriveeAddressText)
+                                        .modifier(VibraFieldModifier())
+                                        .onChange(of: viewModel.arriveeAddressText) { _ in
+                                            showArriveeSuggestions = !viewModel.arriveeAddressText.isEmpty
+                                        }
+                                }
+                                
+                                if showArriveeSuggestions && !viewModel.arriveeSearchResults.isEmpty {
+                                    SearchSuggestionsView(
+                                        results: viewModel.arriveeSearchResults,
+                                        onSelect: { item in
+                                            viewModel.selectArrivalAddress(item)
+                                            showArriveeSuggestions = false
+                                        }
+                                    )
+                                }
+                            }
                         }
 
                         HStack {
@@ -242,14 +291,22 @@ struct CreateSortieView: View {
                             }
                         }
 
-                        MapViewRepresentable(
+                        ImprovedMapView(
                             region: $mapRegion,
                             startCoordinate: $viewModel.startCoordinate,
                             endCoordinate: $viewModel.endCoordinate,
                             routeCoordinates: $viewModel.routeCoordinates,
-                            isSelectingStart: $isSelectingStart
+                            userLocation: $viewModel.userLocation,
+                            isSelectingStart: $isSelectingStart,
+                            onCoordinateSelected: { coord in
+                                if isSelectingStart {
+                                    viewModel.setStartCoordinate(coord)
+                                } else {
+                                    viewModel.setEndCoordinate(coord)
+                                }
+                            }
                         )
-                        .frame(height: 280)
+                        .frame(height: 320)
                         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                         .shadow(color: AppColors.ShadowColor, radius: 10, x: 0, y: 5)
 
@@ -342,10 +399,14 @@ struct CreateSortieView: View {
             .padding()
         }
     }
+}
+// MARK: - Extension CreateSortieView (Navigation & Helpers)
+
+extension CreateSortieView {
     
     // MARK: - Navigation Buttons
     
-    private var navigationButtons: some View {
+    var navigationButtons: some View {
         HStack(spacing: 12) {
             // Bouton Précédent
             if currentStep > 1 {
@@ -376,14 +437,12 @@ struct CreateSortieView: View {
             // Bouton Suivant / Créer
             Button {
                 if currentStep < 3 {
-                    // Validation de l'étape courante
                     if validateCurrentStep() {
                         withAnimation {
                             currentStep += 1
                         }
                     }
                 } else {
-                    // Créer la sortie
                     Task { await viewModel.createSortieAndCamping() }
                 }
             } label: {
@@ -421,7 +480,7 @@ struct CreateSortieView: View {
     
     // MARK: - Validation
     
-    private func validateCurrentStep() -> Bool {
+    func validateCurrentStep() -> Bool {
         switch currentStep {
         case 1:
             if viewModel.titre.isEmpty {
@@ -453,7 +512,7 @@ struct CreateSortieView: View {
 
     // MARK: - Sous-vues simples pour le style
 
-    private func styledGroupBox<Content: View>(
+    func styledGroupBox<Content: View>(
         title: String,
         systemImage: String,
         @ViewBuilder content: () -> Content
@@ -479,12 +538,12 @@ struct CreateSortieView: View {
         }
     }
 
-    private func vibraTextField(_ placeholder: String, text: Binding<String>) -> some View {
+    func vibraTextField(_ placeholder: String, text: Binding<String>) -> some View {
         TextField(placeholder, text: text)
             .modifier(VibraFieldModifier())
     }
 
-    private func vibraMultilineField(_ placeholder: String, text: Binding<String>) -> some View {
+    func vibraMultilineField(_ placeholder: String, text: Binding<String>) -> some View {
         ZStack(alignment: .topLeading) {
             if text.wrappedValue.isEmpty {
                 Text(placeholder)
@@ -509,7 +568,7 @@ struct CreateSortieView: View {
         )
     }
 
-    private func segmentButton(_ title: String, systemImage: String, isActive: Bool, action: @escaping () -> Void) -> some View {
+    func segmentButton(_ title: String, systemImage: String, isActive: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Image(systemName: systemImage)
@@ -530,7 +589,7 @@ struct CreateSortieView: View {
         .foregroundColor(isActive ? AppColors.GreenAccent : AppColors.TextSecondary)
     }
 
-    private func infoPill(title: String, value: String, icon: String) -> some View {
+    func infoPill(title: String, value: String, icon: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
                 .foregroundColor(AppColors.GreenAccent)
@@ -570,32 +629,100 @@ struct VibraFieldModifier: ViewModifier {
     }
 }
 
-// MARK: - MapViewRepresentable
+// MARK: - SearchSuggestionsView (Autocomplétion)
 
-struct MapViewRepresentable: UIViewRepresentable {
+struct SearchSuggestionsView: View {
+    let results: [MKMapItem]
+    let onSelect: (MKMapItem) -> Void
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(results.prefix(5), id: \.self) { item in
+                Button {
+                    onSelect(item)
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "mappin.circle.fill")
+                            .foregroundColor(AppColors.GreenAccent)
+                            .font(.system(size: 14))
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(item.name ?? "")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(AppColors.TextPrimary)
+                            
+                            if let address = item.placemark.title {
+                                Text(address)
+                                    .font(.system(size: 12))
+                                    .foregroundColor(AppColors.TextTertiary)
+                            }
+                        }
+                        
+                        Spacer()
+                    }
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 12)
+                }
+                
+                if item != results.prefix(5).last {
+                    Divider()
+                        .background(AppColors.DividerColor)
+                }
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(AppColors.CardDark)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(AppColors.BorderColor, lineWidth: 0.7)
+                )
+        )
+        .shadow(color: AppColors.ShadowColor, radius: 8, x: 0, y: 4)
+    }
+}
 
+// MARK: - ImprovedMapView avec géolocalisation
+
+struct ImprovedMapView: UIViewRepresentable {
     @Binding var region: MKCoordinateRegion
     @Binding var startCoordinate: CLLocationCoordinate2D?
     @Binding var endCoordinate: CLLocationCoordinate2D?
     @Binding var routeCoordinates: [CLLocationCoordinate2D]
+    @Binding var userLocation: CLLocationCoordinate2D?
     @Binding var isSelectingStart: Bool
+    
+    let onCoordinateSelected: (CLLocationCoordinate2D) -> Void
 
     func makeUIView(context: Context) -> MKMapView {
         let map = MKMapView()
-        map.setRegion(region, animated: false)
         map.delegate = context.coordinator
+        map.showsUserLocation = true
+        map.userTrackingMode = .follow
+        
+        // Centrer sur la position de l'utilisateur au démarrage
+        map.setRegion(region, animated: false)
 
         let tapGesture = UITapGestureRecognizer(
             target: context.coordinator,
             action: #selector(Coordinator.handleTap(_:))
         )
         map.addGestureRecognizer(tapGesture)
+        
         return map
     }
 
     func updateUIView(_ uiView: MKMapView, context: Context) {
-        uiView.setRegion(region, animated: false)
-        uiView.removeAnnotations(uiView.annotations)
+        // Mettre à jour la position utilisateur
+        if let userLoc = userLocation {
+            let region = MKCoordinateRegion(
+                center: userLoc,
+                span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
+            )
+            uiView.setRegion(region, animated: true)
+        }
+        
+        uiView.removeAnnotations(uiView.annotations.filter { !($0 is MKUserLocation) })
         uiView.removeOverlays(uiView.overlays)
 
         if let start = startCoordinate {
@@ -610,12 +737,13 @@ struct MapViewRepresentable: UIViewRepresentable {
             pin.title = "Arrivée"
             uiView.addAnnotation(pin)
         }
+        
         if routeCoordinates.count > 1 {
             let polyline = MKPolyline(coordinates: routeCoordinates, count: routeCoordinates.count)
             uiView.addOverlay(polyline)
             uiView.setVisibleMapRect(
                 polyline.boundingMapRect,
-                edgePadding: UIEdgeInsets(top: 40, left: 40, bottom: 40, right: 40),
+                edgePadding: UIEdgeInsets(top: 60, left: 60, bottom: 60, right: 60),
                 animated: true
             )
         }
@@ -626,16 +754,26 @@ struct MapViewRepresentable: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject, MKMapViewDelegate {
-        var parent: MapViewRepresentable
+        var parent: ImprovedMapView
 
-        init(_ parent: MapViewRepresentable) { self.parent = parent }
+        init(_ parent: ImprovedMapView) {
+            self.parent = parent
+        }
 
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
             guard let mapView = gesture.view as? MKMapView else { return }
             let point = gesture.location(in: mapView)
             let coord = mapView.convert(point, toCoordinateFrom: mapView)
-            if parent.isSelectingStart { parent.startCoordinate = coord }
-            else { parent.endCoordinate = coord }
+            
+            parent.onCoordinateSelected(coord)
+        }
+        
+        func mapView(_ mapView: MKMapView, didUpdate userLocation: MKUserLocation) {
+            if let location = userLocation.location {
+                DispatchQueue.main.async {
+                    self.parent.userLocation = location.coordinate
+                }
+            }
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
@@ -646,6 +784,34 @@ struct MapViewRepresentable: UIViewRepresentable {
                 return renderer
             }
             return MKOverlayRenderer(overlay: overlay)
+        }
+        
+        func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            if annotation is MKUserLocation {
+                return nil
+            }
+            
+            let identifier = "CustomPin"
+            var annotationView = mapView.dequeueReusableAnnotationView(withIdentifier: identifier)
+            
+            if annotationView == nil {
+                annotationView = MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+                annotationView?.canShowCallout = true
+            } else {
+                annotationView?.annotation = annotation
+            }
+            
+            if let markerView = annotationView as? MKMarkerAnnotationView {
+                if annotation.title == "Départ" {
+                    markerView.markerTintColor = UIColor(AppColors.GreenAccent)
+                    markerView.glyphImage = UIImage(systemName: "mappin.circle.fill")
+                } else if annotation.title == "Arrivée" {
+                    markerView.markerTintColor = UIColor(AppColors.TealAccent)
+                    markerView.glyphImage = UIImage(systemName: "flag.fill")
+                }
+            }
+            
+            return annotationView
         }
     }
 }

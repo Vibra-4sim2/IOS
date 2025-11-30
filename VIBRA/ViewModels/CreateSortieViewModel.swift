@@ -15,22 +15,18 @@ final class CreateSortieViewModel: ObservableObject {
     
     // MARK: - Champs Sortie
     
-    /// type côté UI: "RANDO", "VELO_ELECTRIQUE", "CAMPING"
     @Published var type: String = "RANDO"
-    
     @Published var titre: String = ""
     @Published var description: String = ""
     @Published var date: Date = Date()
     @Published var optionCamping: Bool = false
     
-    // Ancien champ URL supprimé, remplacé par sélection d'image
     @Published var selectedPhotoItem: PhotosPickerItem? = nil
     @Published var selectedUIImage: UIImage? = nil
     @Published var photoData: Data? = nil
     @Published var isLoadingImage: Bool = false
     
     @Published var capacite: Int? = nil
-    
     @Published var difficulte: String = "MOYEN"
     @Published var niveau: String = "INTERMEDIAIRE"
     @Published var prixSortie: Double? = nil
@@ -40,13 +36,21 @@ final class CreateSortieViewModel: ObservableObject {
     @Published var startCoordinate: CLLocationCoordinate2D? = nil
     @Published var endCoordinate: CLLocationCoordinate2D? = nil
     @Published var itineraire: ItineraireDTO? = nil
-    
     @Published var routeCoordinates: [CLLocationCoordinate2D] = []
     
     @Published var departAddressText: String = ""
     @Published var arriveeAddressText: String = ""
     
+    // Nouveaux champs pour l'autocomplétion
+    @Published var departSearchResults: [MKMapItem] = []
+    @Published var arriveeSearchResults: [MKMapItem] = []
+    @Published var isSearchingDepart: Bool = false
+    @Published var isSearchingArrivee: Bool = false
+    
     @Published var isFetchingRoute: Bool = false
+    
+    // Position utilisateur
+    @Published var userLocation: CLLocationCoordinate2D? = nil
     
     // MARK: - Camping
     
@@ -61,14 +65,14 @@ final class CreateSortieViewModel: ObservableObject {
     // MARK: - UI state
     
     @Published var isLoading: Bool = false
-    
     @Published var errorMessage: String? = nil
     @Published var showErrorAlert: Bool = false
-    
     @Published var successMessage: String? = nil
     @Published var showSuccessAlert: Bool = false
     
     private let service: SortieService
+    private let locationManager = CLLocationManager()
+    private let searchCompleter = MKLocalSearchCompleter()
     private var cancellables = Set<AnyCancellable>()
     
     init(service: SortieService = .shared) {
@@ -79,6 +83,32 @@ final class CreateSortieViewModel: ObservableObject {
             .compactMap { $0 }
             .sink { [weak self] item in
                 Task { await self?.loadImage(from: item) }
+            }
+            .store(in: &cancellables)
+        
+        // Recherche d'adresses pour le départ
+        $departAddressText
+            .debounce(for: .milliseconds(500), scheduler: RunLoop.main)
+            .removeDuplicates()
+            .sink { [weak self] query in
+                if !query.isEmpty {
+                    self?.searchAddress(query: query, forDeparture: true)
+                } else {
+                    self?.departSearchResults = []
+                }
+            }
+            .store(in: &cancellables)
+        
+        // Recherche d'adresses pour l'arrivée
+        $arriveeAddressText
+            .debounce(for: .milliseconds(500), scheduler: RunLoop.main)
+            .removeDuplicates()
+            .sink { [weak self] query in
+                if !query.isEmpty {
+                    self?.searchAddress(query: query, forDeparture: false)
+                } else {
+                    self?.arriveeSearchResults = []
+                }
             }
             .store(in: &cancellables)
     }
@@ -105,8 +135,111 @@ final class CreateSortieViewModel: ObservableObject {
             await MainActor.run {
                 self.photoData = nil
                 self.selectedUIImage = nil
-                self.showValidationError("Impossible de charger l’image sélectionnée.")
+                self.showValidationError("Impossible de charger l'image sélectionnée.")
             }
+        }
+    }
+    
+    // MARK: - Géolocalisation
+    
+    func requestLocationPermission() {
+        locationManager.requestWhenInUseAuthorization()
+    }
+    
+    func updateUserLocation(_ location: CLLocationCoordinate2D) {
+        userLocation = location
+    }
+    
+    // MARK: - Recherche d'adresses
+    
+    func searchAddress(query: String, forDeparture: Bool) {
+        if forDeparture {
+            isSearchingDepart = true
+        } else {
+            isSearchingArrivee = true
+        }
+        
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = query
+        
+        // Utiliser la position de l'utilisateur comme région de recherche si disponible
+        if let userLoc = userLocation {
+            request.region = MKCoordinateRegion(
+                center: userLoc,
+                span: MKCoordinateSpan(latitudeDelta: 0.5, longitudeDelta: 0.5)
+            )
+        }
+        
+        let search = MKLocalSearch(request: request)
+        search.start { [weak self] response, error in
+            guard let self = self else { return }
+            
+            DispatchQueue.main.async {
+                if forDeparture {
+                    self.isSearchingDepart = false
+                    if let response = response {
+                        self.departSearchResults = response.mapItems
+                    }
+                } else {
+                    self.isSearchingArrivee = false
+                    if let response = response {
+                        self.arriveeSearchResults = response.mapItems
+                    }
+                }
+            }
+        }
+    }
+    
+    func selectDepartureAddress(_ mapItem: MKMapItem) {
+        startCoordinate = mapItem.placemark.coordinate
+        departAddressText = mapItem.name ?? mapItem.placemark.title ?? ""
+        departSearchResults = []
+        
+        // Géocodage inverse pour obtenir l'adresse complète
+        reverseGeocode(coordinate: mapItem.placemark.coordinate) { [weak self] address in
+            if let address = address {
+                self?.departAddressText = address
+            }
+        }
+    }
+    
+    func selectArrivalAddress(_ mapItem: MKMapItem) {
+        endCoordinate = mapItem.placemark.coordinate
+        arriveeAddressText = mapItem.name ?? mapItem.placemark.title ?? ""
+        arriveeSearchResults = []
+        
+        // Géocodage inverse pour obtenir l'adresse complète
+        reverseGeocode(coordinate: mapItem.placemark.coordinate) { [weak self] address in
+            if let address = address {
+                self?.arriveeAddressText = address
+            }
+        }
+    }
+    
+    func reverseGeocode(coordinate: CLLocationCoordinate2D, completion: @escaping (String?) -> Void) {
+        let location = CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude)
+        let geocoder = CLGeocoder()
+        
+        geocoder.reverseGeocodeLocation(location) { placemarks, error in
+            guard let placemark = placemarks?.first, error == nil else {
+                completion(nil)
+                return
+            }
+            
+            var addressParts: [String] = []
+            
+            if let name = placemark.name {
+                addressParts.append(name)
+            }
+            if let locality = placemark.locality {
+                addressParts.append(locality)
+            }
+            if let country = placemark.country {
+                addressParts.append(country)
+            }
+            
+            let address = addressParts.joined(separator: ", ")
+            completion(address.isEmpty ? nil : address)
         }
     }
     
@@ -114,17 +247,35 @@ final class CreateSortieViewModel: ObservableObject {
     
     func setStartCoordinate(_ coord: CLLocationCoordinate2D) {
         startCoordinate = coord
+        
+        // Géocodage inverse pour mettre à jour l'adresse
+        reverseGeocode(coordinate: coord) { [weak self] address in
+            if let address = address {
+                DispatchQueue.main.async {
+                    self?.departAddressText = address
+                }
+            }
+        }
     }
     
     func setEndCoordinate(_ coord: CLLocationCoordinate2D) {
         endCoordinate = coord
+        
+        // Géocodage inverse pour mettre à jour l'adresse
+        reverseGeocode(coordinate: coord) { [weak self] address in
+            if let address = address {
+                DispatchQueue.main.async {
+                    self?.arriveeAddressText = address
+                }
+            }
+        }
     }
     
     // MARK: - Appel ORS
     
     func fetchRoute() async {
         guard let start = startCoordinate, let end = endCoordinate else {
-            showValidationError("Veuillez choisir un point de départ et un point d’arrivée.")
+            showValidationError("Veuillez choisir un point de départ et un point d'arrivée.")
             return
         }
         
@@ -156,7 +307,7 @@ final class CreateSortieViewModel: ObservableObject {
         } catch SortieServiceError.decodingError {
             showValidationError("Erreur de lecture de la réponse OpenRouteService.")
         } catch {
-            showValidationError("Erreur lors de la récupération de l’itinéraire.")
+            showValidationError("Erreur lors de la récupération de l'itinéraire.")
         }
         
         isFetchingRoute = false
@@ -184,7 +335,7 @@ final class CreateSortieViewModel: ObservableObject {
                 throw ValidationError("Le titre de la sortie est obligatoire.")
             }
             guard let itin = itineraire else {
-                throw ValidationError("Veuillez calculer l’itinéraire avant de créer la sortie.")
+                throw ValidationError("Veuillez calculer l'itinéraire avant de créer la sortie.")
             }
             
             let isoFormatter = ISO8601DateFormatter()
@@ -235,7 +386,7 @@ final class CreateSortieViewModel: ObservableObject {
                     #endif
                     
                 } catch SortieServiceError.unauthorized {
-                    throw ValidationError("Vous n’êtes pas authentifié (401) pour créer un camping.")
+                    throw ValidationError("Vous n'êtes pas authentifié (401) pour créer un camping.")
                 }
             }
             
@@ -243,7 +394,7 @@ final class CreateSortieViewModel: ObservableObject {
             let itinDict = try buildItineraireJSONDict(from: itin)
             let itinData = try JSONSerialization.data(withJSONObject: itinDict, options: [])
             guard let itinJSON = String(data: itinData, encoding: .utf8) else {
-                throw ValidationError("Impossible de préparer les données d’itinéraire.")
+                throw ValidationError("Impossible de préparer les données d'itinéraire.")
             }
             
             #if DEBUG
@@ -285,7 +436,7 @@ final class CreateSortieViewModel: ObservableObject {
             print("[CreateSortieVM] Sortie créée: id=\(sortieResp._id)")
             #endif
             
-            // ---------- Récupérer userId depuis le JWT (même logique que Profile / MyRides) ----------
+            // ---------- Récupérer userId depuis le JWT ----------
             var currentUserId: String? = nil
             do {
                 let token = try KeychainManager.shared.getJWT()
@@ -314,11 +465,11 @@ final class CreateSortieViewModel: ObservableObject {
                     #if DEBUG
                     print("[CreateSortieVM] Erreur création participation auto:", error)
                     #endif
-                    successMessage = "Sortie créée avec succès (id: \(sortieResp._id)), mais la participation automatique n’a pas pu être créée."
+                    successMessage = "Sortie créée avec succès (id: \(sortieResp._id)), mais la participation automatique n'a pas pu être créée."
                     showSuccessAlert = true
                 }
             } else {
-                successMessage = "Sortie créée avec succès (id: \(sortieResp._id)), mais la participation automatique n’a pas pu être créée (userId introuvable dans le JWT)."
+                successMessage = "Sortie créée avec succès (id: \(sortieResp._id)), mais la participation automatique n'a pas pu être créée (userId introuvable dans le JWT)."
                 showSuccessAlert = true
             }
             
@@ -328,7 +479,7 @@ final class CreateSortieViewModel: ObservableObject {
         } catch let error as ValidationError {
             showValidationError(error.message)
         } catch SortieServiceError.unauthorized {
-            showValidationError("Vous n’êtes pas authentifié (401). Connectez-vous puis réessayez.")
+            showValidationError("Vous n'êtes pas authentifié (401). Connectez-vous puis réessayez.")
         } catch SortieServiceError.invalidResponse {
             showValidationError("Réponse invalide du serveur lors de la création de la sortie.")
         } catch SortieServiceError.decodingError {
@@ -401,6 +552,8 @@ final class CreateSortieViewModel: ObservableObject {
         routeCoordinates = []
         departAddressText = ""
         arriveeAddressText = ""
+        departSearchResults = []
+        arriveeSearchResults = []
         
         campingNom = ""
         campingDescription = ""
