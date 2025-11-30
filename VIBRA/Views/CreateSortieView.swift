@@ -16,7 +16,8 @@ struct CreateSortieView: View {
         span: MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1)
     )
     @State private var isSelectingStart = true
-
+    @State private var currentStep = 1
+    
     var body: some View {
         NavigationView {
             ZStack {
@@ -30,228 +31,30 @@ struct CreateSortieView: View {
                 )
                 .ignoresSafeArea()
 
-                ScrollView {
-                    VStack(spacing: 20) {
-
-                        // MARK: - Infos sortie
-                        styledGroupBox(title: "Informations de la sortie", systemImage: "info.circle") {
-                            VStack(alignment: .leading, spacing: 12) {
-                                vibraTextField("Titre", text: $viewModel.titre)
-                                vibraMultilineField("Description", text: $viewModel.description)
-
-                                DatePicker(
-                                    "Date de la sortie",
-                                    selection: $viewModel.date,
-                                    displayedComponents: [.date, .hourAndMinute]
-                                )
-                                .accentColor(AppColors.GreenAccent)
-
-                                // IMPORTANT : valeurs UI "RANDO" / "VELO_ELECTRIQUE" / "CAMPING"
-                                // qui seront ensuite mappées vers l'enum backend: RANDONNEE / VELO / CAMPING
-                                Picker("Type", selection: $viewModel.type) {
-                                    Text("Randonnée").tag("RANDO")
-                                    Text("Vélo électrique").tag("VELO_ELECTRIQUE")
-                                    Text("Camping").tag("CAMPING")
-                                }
-                                .pickerStyle(.segmented)
-                                .tint(AppColors.TealAccent)
-
-                                // --------- Sélection d'image (remplace l'URL) ----------
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Photo de la sortie (optionnel)")
-                                        .font(.subheadline)
-                                        .foregroundColor(AppColors.TextSecondary)
-
-                                    HStack(spacing: 12) {
-                                        PhotosPicker(
-                                            selection: $viewModel.selectedPhotoItem,
-                                            matching: .images,
-                                            photoLibrary: .shared()
-                                        ) {
-                                            HStack {
-                                                Image(systemName: "photo.on.rectangle")
-                                                Text(viewModel.selectedPhotoItem == nil ? "Choisir une image" : "Changer l’image")
-                                            }
-                                            .font(.system(size: 14, weight: .semibold))
-                                            .padding(.vertical, 10)
-                                            .padding(.horizontal, 14)
-                                            .background(
-                                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                                    .fill(AppColors.CardGlass)
-                                            )
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                                    .stroke(AppColors.DividerColor, lineWidth: 0.7)
-                                            )
-                                        }
-
-                                        if let image = viewModel.selectedUIImage {
-                                            Image(uiImage: image)
-                                                .resizable()
-                                                .scaledToFill()
-                                                .frame(width: 60, height: 60)
-                                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                                .overlay(
-                                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                                        .stroke(AppColors.DividerColor, lineWidth: 0.7)
-                                                )
-                                        }
-                                    }
-
-                                    if viewModel.isLoadingImage {
-                                        ProgressView("Chargement de l’image…")
-                                            .progressViewStyle(CircularProgressViewStyle(tint: AppColors.GreenAccent))
-                                            .font(.footnote)
-                                    }
-                                }
-
-                                TextField("Capacité (optionnel)", value: $viewModel.capacite, formatter: NumberFormatter())
-                                    .keyboardType(.numberPad)
-                                    .modifier(VibraFieldModifier())
-                                
-                                vibraTextField("Difficulté (ex: FACILE, MOYEN, DIFFICILE)", text: $viewModel.difficulte)
-                                vibraTextField("Niveau (ex: DEBUTANT, INTERMEDIAIRE, AVANCE)", text: $viewModel.niveau)
-                                
-                                TextField("Prix de la sortie (optionnel)", value: $viewModel.prixSortie, formatter: NumberFormatter())
-                                    .keyboardType(.decimalPad)
-                                    .modifier(VibraFieldModifier())
-                            }
-                        }
-
-                        // MARK: - Itinéraire
-                        styledGroupBox(title: "Itinéraire", systemImage: "map") {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text("Choisissez le point de départ et d’arrivée sur la carte, puis calculez l’itinéraire.")
-                                    .font(.footnote)
-                                    .foregroundColor(AppColors.TextTertiary)
-
-                                HStack {
-                                    vibraTextField("Adresse départ (optionnel)", text: $viewModel.departAddressText)
-                                    vibraTextField("Adresse arrivée (optionnel)", text: $viewModel.arriveeAddressText)
-                                }
-
-                                HStack {
-                                    segmentButton("Départ", systemImage: "mappin", isActive: isSelectingStart) {
-                                        isSelectingStart = true
-                                    }
-                                    segmentButton("Arrivée", systemImage: "mappin.circle", isActive: !isSelectingStart) {
-                                        isSelectingStart = false
-                                    }
-                                }
-
-                                MapViewRepresentable(
-                                    region: $mapRegion,
-                                    startCoordinate: $viewModel.startCoordinate,
-                                    endCoordinate: $viewModel.endCoordinate,
-                                    routeCoordinates: $viewModel.routeCoordinates,
-                                    isSelectingStart: $isSelectingStart
-                                )
-                                .frame(height: 230)
-                                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                                .shadow(color: AppColors.ShadowColor, radius: 10, x: 0, y: 5)
-
-                                if viewModel.isFetchingRoute {
-                                    ProgressView("Calcul de l’itinéraire…")
-                                        .progressViewStyle(CircularProgressViewStyle(tint: AppColors.GreenAccent))
-                                } else {
-                                    Button("Calculer l’itinéraire") {
-                                        Task { await viewModel.fetchRoute() }
-                                    }
-                                    .buttonStyle(.borderedProminent)
-                                    .tint(AppColors.TealAccent)
-                                    .disabled(viewModel.startCoordinate == nil || viewModel.endCoordinate == nil)
-                                }
-
-                                if let itin = viewModel.itineraire {
-                                    HStack(spacing: 16) {
-                                        if let distance = itin.distance {
-                                            let distanceKm = distance / 1000
-                                            let distanceText = String(format: "%.1f km", distanceKm)
-                                            
-                                            infoPill(
-                                                title: "Distance",
-                                                value: distanceText,
-                                                icon: "ruler"
-                                            )
-                                        }
-                                        if let duree = itin.duree_estimee {
-                                            let minutes = Int(duree / 60)
-                                            infoPill(
-                                                title: "Durée estimée",
-                                                value: "\(minutes) min",
-                                                icon: "clock"
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // MARK: - Camping
-                        styledGroupBox(title: "Camping", systemImage: "tent") {
-                            VStack(alignment: .leading, spacing: 12) {
-                                Toggle("Inclure un camping", isOn: $viewModel.optionCamping)
-                                    .tint(AppColors.GreenAccent)
-
-                                if viewModel.optionCamping {
-                                    VStack(alignment: .leading, spacing: 12) {
-                                        vibraTextField("Nom du camping", text: $viewModel.campingNom)
-                                        vibraMultilineField("Description (optionnel)", text: $viewModel.campingDescription)
-                                        vibraTextField("Lieu (adresse)", text: $viewModel.campingLieu)
-
-                                        TextField("Prix (optionnel)", value: $viewModel.campingPrix, formatter: NumberFormatter())
-                                            .keyboardType(.decimalPad)
-                                            .modifier(VibraFieldModifier())
-
-                                        TextField("Nombre de participants (optionnel)", value: $viewModel.campingParticipants, formatter: NumberFormatter())
-                                            .keyboardType(.numberPad)
-                                            .modifier(VibraFieldModifier())
-
-                                        DatePicker(
-                                            "Date début camping",
-                                            selection: $viewModel.campingDateDebut,
-                                            displayedComponents: [.date, .hourAndMinute]
-                                        )
-                                        DatePicker(
-                                            "Date fin camping",
-                                            selection: $viewModel.campingDateFin,
-                                            displayedComponents: [.date, .hourAndMinute]
-                                        )
-                                    }
-                                    .padding(.top, 4)
-                                }
-                            }
-                        }
-
-                        // MARK: - CTA principal
-                        Button {
-                            Task { await viewModel.createSortieAndCamping() }
-                        } label: {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    .fill(
-                                        LinearGradient(
-                                            gradient: Gradient(colors: [AppColors.GreenAccent, AppColors.GreenDark]),
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                                    .shadow(color: AppColors.GlowGreen.opacity(0.8), radius: 14, x: 0, y: 6)
-
-                                if viewModel.isLoading {
-                                    ProgressView()
-                                        .tint(.black)
-                                } else {
-                                    Text("Créer la sortie")
-                                        .font(.system(size: 16, weight: .semibold, design: .rounded))
-                                        .foregroundColor(.black)
-                                }
-                            }
-                            .frame(height: 52)
-                        }
-                        .padding(.top, 8)
+                VStack(spacing: 0) {
+                    // MARK: - Header avec indicateur de progression
+                    stepIndicator
+                        .padding(.horizontal)
+                        .padding(.top, 20)
+                        .padding(.bottom, 16)
+                    
+                    // MARK: - Contenu de l'étape actuelle
+                    TabView(selection: $currentStep) {
+                        step1Content
+                            .tag(1)
+                        
+                        step2Content
+                            .tag(2)
+                        
+                        step3Content
+                            .tag(3)
                     }
-                    .padding()
+                    .tabViewStyle(.page(indexDisplayMode: .never))
+                    .animation(.easeInOut, value: currentStep)
+                    
+                    // MARK: - Boutons de navigation
+                    navigationButtons
+                        .padding()
                 }
             }
             .navigationTitle("")
@@ -262,10 +65,389 @@ struct CreateSortieView: View {
                 Text(viewModel.errorMessage ?? "Une erreur est survenue.")
             })
             .alert("Succès", isPresented: $viewModel.showSuccessAlert, actions: {
-                Button("OK", role: .cancel) { }
+                Button("OK", role: .cancel) {
+                    currentStep = 1
+                }
             }, message: {
                 Text(viewModel.successMessage ?? "Opération réussie.")
             })
+        }
+    }
+    
+    // MARK: - Step Indicator
+    
+    private var stepIndicator: some View {
+        HStack(spacing: 12) {
+            ForEach(1...3, id: \.self) { step in
+                VStack(spacing: 8) {
+                    Circle()
+                        .fill(currentStep >= step ? AppColors.GreenAccent : AppColors.CardGlass)
+                        .frame(width: 36, height: 36)
+                        .overlay(
+                            Text("\(step)")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(currentStep >= step ? .black : AppColors.TextTertiary)
+                        )
+                    
+                    Text(stepTitle(for: step))
+                        .font(.caption2)
+                        .foregroundColor(currentStep == step ? AppColors.GreenAccent : AppColors.TextTertiary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+                .frame(maxWidth: .infinity)
+                
+                if step < 3 {
+                    Rectangle()
+                        .fill(currentStep > step ? AppColors.GreenAccent : AppColors.CardGlass)
+                        .frame(height: 2)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(AppColors.CardDark.opacity(0.6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(AppColors.BorderColor, lineWidth: 0.7)
+                )
+        )
+        .shadow(color: AppColors.ShadowColor, radius: 8, x: 0, y: 4)
+    }
+    
+    private func stepTitle(for step: Int) -> String {
+        switch step {
+        case 1: return "Informations"
+        case 2: return "Itinéraire"
+        case 3: return "Camping"
+        default: return ""
+        }
+    }
+    
+    // MARK: - Step 1: Informations de la sortie
+    
+    private var step1Content: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                styledGroupBox(title: "Informations de la sortie", systemImage: "info.circle") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        vibraTextField("Titre", text: $viewModel.titre)
+                        vibraMultilineField("Description", text: $viewModel.description)
+
+                        DatePicker(
+                            "Date de la sortie",
+                            selection: $viewModel.date,
+                            displayedComponents: [.date, .hourAndMinute]
+                        )
+                        .accentColor(AppColors.GreenAccent)
+
+                        Picker("Type", selection: $viewModel.type) {
+                            Text("Randonnée").tag("RANDO")
+                            Text("Vélo électrique").tag("VELO_ELECTRIQUE")
+                            Text("Camping").tag("CAMPING")
+                        }
+                        .pickerStyle(.segmented)
+                        .tint(AppColors.TealAccent)
+
+                        // Sélection d'image
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Photo de la sortie (optionnel)")
+                                .font(.subheadline)
+                                .foregroundColor(AppColors.TextSecondary)
+
+                            HStack(spacing: 12) {
+                                PhotosPicker(
+                                    selection: $viewModel.selectedPhotoItem,
+                                    matching: .images,
+                                    photoLibrary: .shared()
+                                ) {
+                                    HStack {
+                                        Image(systemName: "photo.on.rectangle")
+                                        Text(viewModel.selectedPhotoItem == nil ? "Choisir une image" : "Changer l'image")
+                                    }
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .padding(.vertical, 10)
+                                    .padding(.horizontal, 14)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                            .fill(AppColors.CardGlass)
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                            .stroke(AppColors.DividerColor, lineWidth: 0.7)
+                                    )
+                                }
+
+                                if let image = viewModel.selectedUIImage {
+                                    Image(uiImage: image)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(width: 60, height: 60)
+                                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                                .stroke(AppColors.DividerColor, lineWidth: 0.7)
+                                        )
+                                }
+                            }
+
+                            if viewModel.isLoadingImage {
+                                ProgressView("Chargement de l'image…")
+                                    .progressViewStyle(CircularProgressViewStyle(tint: AppColors.GreenAccent))
+                                    .font(.footnote)
+                            }
+                        }
+
+                        TextField("Capacité (optionnel)", value: $viewModel.capacite, formatter: NumberFormatter())
+                            .keyboardType(.numberPad)
+                            .modifier(VibraFieldModifier())
+                        
+                        vibraTextField("Difficulté (ex: FACILE, MOYEN, DIFFICILE)", text: $viewModel.difficulte)
+                        vibraTextField("Niveau (ex: DEBUTANT, INTERMEDIAIRE, AVANCE)", text: $viewModel.niveau)
+                        
+                        TextField("Prix de la sortie (optionnel)", value: $viewModel.prixSortie, formatter: NumberFormatter())
+                            .keyboardType(.decimalPad)
+                            .modifier(VibraFieldModifier())
+                    }
+                }
+            }
+            .padding()
+        }
+    }
+    
+    // MARK: - Step 2: Itinéraire
+    
+    private var step2Content: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                styledGroupBox(title: "Itinéraire", systemImage: "map") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Choisissez le point de départ et d'arrivée sur la carte, puis calculez l'itinéraire.")
+                            .font(.footnote)
+                            .foregroundColor(AppColors.TextTertiary)
+
+                        HStack {
+                            vibraTextField("Adresse départ (optionnel)", text: $viewModel.departAddressText)
+                            vibraTextField("Adresse arrivée (optionnel)", text: $viewModel.arriveeAddressText)
+                        }
+
+                        HStack {
+                            segmentButton("Départ", systemImage: "mappin", isActive: isSelectingStart) {
+                                isSelectingStart = true
+                            }
+                            segmentButton("Arrivée", systemImage: "mappin.circle", isActive: !isSelectingStart) {
+                                isSelectingStart = false
+                            }
+                        }
+
+                        MapViewRepresentable(
+                            region: $mapRegion,
+                            startCoordinate: $viewModel.startCoordinate,
+                            endCoordinate: $viewModel.endCoordinate,
+                            routeCoordinates: $viewModel.routeCoordinates,
+                            isSelectingStart: $isSelectingStart
+                        )
+                        .frame(height: 280)
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .shadow(color: AppColors.ShadowColor, radius: 10, x: 0, y: 5)
+
+                        if viewModel.isFetchingRoute {
+                            ProgressView("Calcul de l'itinéraire…")
+                                .progressViewStyle(CircularProgressViewStyle(tint: AppColors.GreenAccent))
+                        } else {
+                            Button("Calculer l'itinéraire") {
+                                Task { await viewModel.fetchRoute() }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(AppColors.TealAccent)
+                            .disabled(viewModel.startCoordinate == nil || viewModel.endCoordinate == nil)
+                        }
+
+                        if let itin = viewModel.itineraire {
+                            HStack(spacing: 16) {
+                                if let distance = itin.distance {
+                                    let distanceKm = distance / 1000
+                                    let distanceText = String(format: "%.1f km", distanceKm)
+                                    
+                                    infoPill(
+                                        title: "Distance",
+                                        value: distanceText,
+                                        icon: "ruler"
+                                    )
+                                }
+                                if let duree = itin.duree_estimee {
+                                    let minutes = Int(duree / 60)
+                                    infoPill(
+                                        title: "Durée estimée",
+                                        value: "\(minutes) min",
+                                        icon: "clock"
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .padding()
+        }
+    }
+    
+    // MARK: - Step 3: Camping
+    
+    private var step3Content: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                styledGroupBox(title: "Camping", systemImage: "tent") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Toggle("Inclure un camping", isOn: $viewModel.optionCamping)
+                            .tint(AppColors.GreenAccent)
+
+                        if viewModel.optionCamping {
+                            VStack(alignment: .leading, spacing: 12) {
+                                vibraTextField("Nom du camping", text: $viewModel.campingNom)
+                                vibraMultilineField("Description (optionnel)", text: $viewModel.campingDescription)
+                                vibraTextField("Lieu (adresse)", text: $viewModel.campingLieu)
+
+                                TextField("Prix (optionnel)", value: $viewModel.campingPrix, formatter: NumberFormatter())
+                                    .keyboardType(.decimalPad)
+                                    .modifier(VibraFieldModifier())
+
+                                TextField("Nombre de participants (optionnel)", value: $viewModel.campingParticipants, formatter: NumberFormatter())
+                                    .keyboardType(.numberPad)
+                                    .modifier(VibraFieldModifier())
+
+                                DatePicker(
+                                    "Date début camping",
+                                    selection: $viewModel.campingDateDebut,
+                                    displayedComponents: [.date, .hourAndMinute]
+                                )
+                                DatePicker(
+                                    "Date fin camping",
+                                    selection: $viewModel.campingDateFin,
+                                    displayedComponents: [.date, .hourAndMinute]
+                                )
+                            }
+                            .padding(.top, 4)
+                        } else {
+                            Text("Vous pouvez passer cette étape si vous ne souhaitez pas inclure de camping.")
+                                .font(.footnote)
+                                .foregroundColor(AppColors.TextTertiary)
+                                .padding(.vertical, 8)
+                        }
+                    }
+                }
+            }
+            .padding()
+        }
+    }
+    
+    // MARK: - Navigation Buttons
+    
+    private var navigationButtons: some View {
+        HStack(spacing: 12) {
+            // Bouton Précédent
+            if currentStep > 1 {
+                Button {
+                    withAnimation {
+                        currentStep -= 1
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: "chevron.left")
+                        Text("Précédent")
+                    }
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(AppColors.TextPrimary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(AppColors.CardGlass)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .stroke(AppColors.DividerColor, lineWidth: 1)
+                            )
+                    )
+                }
+            }
+            
+            // Bouton Suivant / Créer
+            Button {
+                if currentStep < 3 {
+                    // Validation de l'étape courante
+                    if validateCurrentStep() {
+                        withAnimation {
+                            currentStep += 1
+                        }
+                    }
+                } else {
+                    // Créer la sortie
+                    Task { await viewModel.createSortieAndCamping() }
+                }
+            } label: {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(colors: [AppColors.GreenAccent, AppColors.GreenDark]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .shadow(color: AppColors.GlowGreen.opacity(0.8), radius: 14, x: 0, y: 6)
+
+                    if viewModel.isLoading {
+                        ProgressView()
+                            .tint(.black)
+                    } else {
+                        HStack {
+                            Text(currentStep < 3 ? "Suivant" : "Créer la sortie")
+                            if currentStep < 3 {
+                                Image(systemName: "chevron.right")
+                            }
+                        }
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .foregroundColor(.black)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+            }
+            .disabled(viewModel.isLoading)
+        }
+    }
+    
+    // MARK: - Validation
+    
+    private func validateCurrentStep() -> Bool {
+        switch currentStep {
+        case 1:
+            if viewModel.titre.isEmpty {
+                viewModel.errorMessage = "Le titre de la sortie est obligatoire."
+                viewModel.showErrorAlert = true
+                return false
+            }
+            return true
+        case 2:
+            if viewModel.itineraire == nil {
+                viewModel.errorMessage = "Veuillez calculer l'itinéraire avant de continuer."
+                viewModel.showErrorAlert = true
+                return false
+            }
+            return true
+        case 3:
+            if viewModel.optionCamping {
+                if viewModel.campingNom.isEmpty || viewModel.campingLieu.isEmpty {
+                    viewModel.errorMessage = "Veuillez remplir les informations de camping (nom et lieu)."
+                    viewModel.showErrorAlert = true
+                    return false
+                }
+            }
+            return true
+        default:
+            return true
         }
     }
 
