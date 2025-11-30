@@ -8,7 +8,7 @@ struct TabBarView: View {
     // Pour ouvrir la création (bouton flottant)
     @State private var showCreateModal: Bool = false
 
-    // Gestion manuelle de l’onglet sélectionné
+    // Gestion manuelle de l'onglet sélectionné
     @State private var selectedTab: Int = 0
     @State private var lastValidTab: Int = 0
 
@@ -75,9 +75,15 @@ struct TabBarView: View {
                     )
                 }
 
-                // MARK: - Top Bar (inchangée)
+                // MARK: - Top Bar
                 VStack(spacing: 0) {
                     HStack {
+                        Image("vibra_logo_white")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 28, height: 28)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                        
                         Text("VIBRA")
                             .font(.system(size: 22, weight: .bold, design: .rounded))
                             .foregroundColor(AppColors.TextPrimary)
@@ -90,10 +96,9 @@ struct TabBarView: View {
                                 showOptions.toggle()
                             }
                         }) {
-                            Image(systemName: "chevron.down")
+                            Image(systemName: "line.3.horizontal")
                                 .font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(AppColors.TextPrimary)
-                                .rotationEffect(.degrees(showOptions ? 180 : 0))
+                                .foregroundColor(.white)
                                 .padding(8)
                                 .background(AppColors.CardGlass)
                                 .clipShape(Circle())
@@ -108,8 +113,7 @@ struct TabBarView: View {
                         } label: {
                             Image(systemName: "bubble.left.and.bubble.right.fill")
                                 .font(.system(size: 24))
-                                .foregroundColor(AppColors.GreenAccent)
-                                .shadow(color: AppColors.GlowGreen.opacity(0.7), radius: 10)
+                                .foregroundColor(.white)
                                 .padding(.horizontal, 6)
                         }
 
@@ -118,8 +122,7 @@ struct TabBarView: View {
                         } label: {
                             Image(systemName: "person.crop.circle")
                                 .font(.system(size: 28))
-                                .foregroundColor(AppColors.GreenAccent)
-                                .shadow(color: AppColors.GlowGreen.opacity(0.7), radius: 10)
+                                .foregroundColor(.white)
                                 .padding(.leading, 2)
                         }
                     }
@@ -232,7 +235,7 @@ struct TabBarView: View {
     }
 }
 
-// MARK: - Élément du menu (inchangé)
+// MARK: - Élément du menu
 struct MenuItemView: View {
     var icon: String
     var label: String
