@@ -9,6 +9,7 @@ import SwiftUI
 
 struct HomeView: View {
     @StateObject private var viewModel = HomeViewModel()
+    @State private var showMatchingView = false
 
     var body: some View {
         NavigationStack {
@@ -25,10 +26,13 @@ struct HomeView: View {
                     // 🔍 Barre de recherche avec effet verre
                     searchBar
 
+                    // 🎯 Bouton Matching (nouveau)
+                    matchingButton
+
                     // 🚴‍♂️ Filtre activité (Randonnée / Vélo)
                     activityFilterBar
 
-                    // 🔍 Boutons principaux (Followers / Recommendation / Explore)
+                    // 🔘 Boutons principaux (Followers / Recommendation / Explore)
                     mainFilterBar
 
                     // 📋 Liste des sorties
@@ -72,7 +76,10 @@ struct HomeView: View {
             .task {
                 print("🚀 HomeView: Appearing, about to load data...")
                 await viewModel.load()
-                print("🏁 HomeView: Load completed. Items count: \(viewModel.items.count)")
+                print("✅ HomeView: Load completed. Items count: \(viewModel.items.count)")
+            }
+            .sheet(isPresented: $showMatchingView) {
+                MatchingView()
             }
         }
     }
@@ -109,6 +116,66 @@ struct HomeView: View {
                 .stroke(AppColors.DividerColor, lineWidth: 0.8)
         )
         .shadow(color: AppColors.ShadowColor.opacity(0.8), radius: 8, x: 0, y: 4)
+        .padding(.horizontal)
+    }
+
+    // MARK: - Matching Button (NEW)
+    private var matchingButton: some View {
+        Button(action: {
+            showMatchingView = true
+        }) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [AppColors.GreenAccent.opacity(0.3), AppColors.TealAccent.opacity(0.3)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 40, height: 40)
+                    
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(AppColors.GreenAccent)
+                }
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Découvrir vos matches")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(AppColors.TextPrimary)
+                    
+                    Text("Trouvez des partenaires compatibles avec l'IA")
+                        .font(.system(size: 12))
+                        .foregroundColor(AppColors.TextSecondary)
+                }
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(AppColors.GreenAccent)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(AppColors.CardDark)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [AppColors.GreenAccent.opacity(0.4), AppColors.TealAccent.opacity(0.4)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1.5
+                            )
+                    )
+                    .shadow(color: AppColors.GlowGreen.opacity(0.5), radius: 12, x: 0, y: 4)
+            )
+        }
         .padding(.horizontal)
     }
 

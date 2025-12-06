@@ -15,6 +15,7 @@ final class HomeService {
     private init() {}
 
     private var baseURL: String { Constants.baseURL }
+    private var flaskURL: String { Constants.flaskURL }
     
     // 🔐 Helper pour créer une requête avec JWT si disponible
     private func createRequest(url: URL, requiresAuth: Bool = false) throws -> URLRequest {
@@ -79,7 +80,7 @@ final class HomeService {
 
     // 🆕 Récupérer les sorties recommandées pour un utilisateur
     func fetchRecommendedRides(userId: String) async throws -> [Ride] {
-        let urlString = "\(baseURL)/recommendations/user/\(userId)"
+        let urlString = "\(flaskURL)/recommendations/user/\(userId)"
         print("⭐ HomeService: Fetching recommended rides from \(urlString)")
         guard let url = URL(string: urlString) else {
             print("❌ HomeService: Invalid URL - \(urlString)")
