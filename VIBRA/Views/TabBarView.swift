@@ -1,122 +1,90 @@
-//
-//  TabBarView.swift
-//  VIBRA
-//
-//  Version : barre corrigée + bouton central cohérent + bouton chat en haut
-//
-
 import SwiftUI
 
 struct TabBarView: View {
+    @EnvironmentObject var ratingPromptViewModel: RatingPromptViewModel
     @State private var showOptions = false
     @State private var showLogoutAlert = false
     @State private var isLoggedOut = false
 
-    // 0: Home, 1: Map, 2: Feed, 3: MyRides
-    @State private var selectedTab: Int = 0
-
-    // Modal pour la création (bouton central)
+    // Pour ouvrir la création (bouton flottant)
     @State private var showCreateModal: Bool = false
 
-    private var bottomSafeAreaInset: CGFloat {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap { $0.windows }
-            .first(where: { $0.isKeyWindow })?
-            .safeAreaInsets.bottom ?? 0
-    }
+    // Gestion manuelle de l'onglet sélectionné
+    @State private var selectedTab: Int = 0
+    @State private var lastValidTab: Int = 0
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                // MARK: - Background
-                LinearGradient(
-                    gradient: Gradient(colors: [AppColors.BackgroundGradientStart, AppColors.BackgroundGradientEnd]),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+            ZStack(alignment: .top) {
 
-                // MARK: - Main tab content
-                TabView(selection: $selectedTab) {
-                    HomeView()
-                        .tag(0)
-                        .ignoresSafeArea(edges: .bottom)
+                // MARK: - Contenu principal (TabView AVEC SLOT VIDE INACTIF)
+                VStack(spacing: 0) {
+                    Spacer(minLength: 60) // espace pour la top bar
 
-                    MapView()
-                        .tag(1)
-                        .ignoresSafeArea(edges: .bottom)
-
-                    FeedView(onCreatePost: {}, onOpenPost: { _ in })
-                        .tag(2)
-                        .ignoresSafeArea(edges: .bottom)
-
-                    MyRidesHomeView()
-                        .tag(3)
-                        .ignoresSafeArea(edges: .bottom)
-                }
-                .tint(AppColors.GreenAccent)
-                // on n’utilise plus un gros padding bas qui donnait l’effet "flottant"
-                //.padding(.bottom, 90)
-
-                // MARK: - Custom bottom tab bar + center button
-                VStack {
-                    Spacer()
-
-                    ZStack(alignment: .bottom) {
-                        // Barre de navigation inférieure
-                        HStack {
-                            // Côté gauche
-                            tabItem(icon: "house.fill", index: 0)
-                            Spacer()
-                            tabItem(icon: "map.fill", index: 1)
-
-                            Spacer(minLength: 60) // espace pour le bouton central
-
-                            // Côté droit
-                            tabItem(icon: "person.2.fill", index: 2)
-                            Spacer()
-                            tabItem(icon: "person.text.rectangle", index: 3)
-                        }
-                        .padding(.horizontal, 26)
-                        .padding(.vertical, 12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                                .fill(AppColors.CardDark.opacity(0.98))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                                .stroke(AppColors.DividerColor, lineWidth: 0.6)
-                        )
-                        .shadow(color: AppColors.ShadowColor.opacity(0.8), radius: 10, x: 0, y: 6)
-                        .padding(.horizontal, 14)
-                        .padding(.bottom, max(8, bottomSafeAreaInset)) // bien calée au bas
-
-                        // Bouton central par-dessus la barre
-                        Button(action: {
-                            withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
-                                showCreateModal = true
+                    TabView(selection: $selectedTab) {
+                        HomeView()
+                            .tabItem {
+                                Image(systemName: "house.fill")
+                                Text("Home")
                             }
-                        }) {
-                            ZStack {
-                                Circle()
-                                    .fill(AppColors.GreenAccent)
-                                    .frame(width: 64, height: 64)
-                                    .shadow(color: AppColors.GlowGreen.opacity(0.9), radius: 18, x: 0, y: 8)
+                            .tag(0)
 
-                                Image(systemName: "plus")
-                                    .font(.system(size: 24, weight: .bold))
-                                    .foregroundColor(.black)
+                        MapView()
+                            .tabItem {
+                                Image(systemName: "map.fill")
+                                Text("Map")
                             }
-                        }
-                        .offset(y: -26) // remonte légèrement le bouton au-dessus de la barre
+                            .tag(1)
+
+                        // SLOT VIDE au milieu : occupe la place, mais qu'on bloque via `onChange`
+                        Color.clear
+                            .tabItem {
+                                Text(" ") // minimum pour garder l'emplacement
+                            }
+                            .tag(2)
+
+                        FeedView(onCreatePost: {}, onOpenPost: { _ in })
+                            .tabItem {
+                                Image(systemName: "person.2.fill")
+                                Text("Community")
+                            }
+                            .tag(3)
+
+                        MyRidesHomeView()
+                            .tabItem {
+                                Image(systemName: "person.text.rectangle")
+                                Text("My Rides")
+                            }
+                            .tag(4)
                     }
-                    .ignoresSafeArea(edges: .bottom)
+                    .onChange(of: selectedTab) { newValue in
+                        // Si on essaie de sélectionner le slot vide (2), on revient au dernier vrai onglet
+                        if newValue == 2 {
+                            selectedTab = lastValidTab
+                        } else {
+                            lastValidTab = newValue
+                        }
+                    }
+                    .accentColor(AppColors.GreenAccent)
+                    .background(
+                        LinearGradient(
+                            gradient: Gradient(colors: [AppColors.BackgroundGradientStart, AppColors.BackgroundGradientEnd]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        .ignoresSafeArea()
+                    )
                 }
 
-                // MARK: - Top Bar (logo / menu / chat / profile)
+                // MARK: - Top Bar
                 VStack(spacing: 0) {
                     HStack {
+                        Image("vibra_logo_white")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 28, height: 28)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                        
                         Text("VIBRA")
                             .font(.system(size: 22, weight: .bold, design: .rounded))
                             .foregroundColor(AppColors.TextPrimary)
@@ -124,16 +92,14 @@ struct TabBarView: View {
 
                         Spacer()
 
-                        // Menu déroulant
                         Button(action: {
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                 showOptions.toggle()
                             }
                         }) {
-                            Image(systemName: "chevron.down")
+                            Image(systemName: "line.3.horizontal")
                                 .font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(AppColors.TextPrimary)
-                                .rotationEffect(.degrees(showOptions ? 180 : 0))
+                                .foregroundColor(.white)
                                 .padding(8)
                                 .background(AppColors.CardGlass)
                                 .clipShape(Circle())
@@ -143,25 +109,21 @@ struct TabBarView: View {
                                 .shadow(color: AppColors.ShadowColor.opacity(0.7), radius: 6, x: 0, y: 3)
                         }
 
-                        // Bouton Chat à côté du profil
                         NavigationLink {
                             ChatsListView()
                         } label: {
                             Image(systemName: "bubble.left.and.bubble.right.fill")
                                 .font(.system(size: 24))
-                                .foregroundColor(AppColors.GreenAccent)
-                                .shadow(color: AppColors.GlowGreen.opacity(0.7), radius: 10)
+                                .foregroundColor(.white)
                                 .padding(.horizontal, 6)
                         }
 
-                        // Profile icon
                         NavigationLink {
                             ProfileView()
                         } label: {
                             Image(systemName: "person.crop.circle")
                                 .font(.system(size: 28))
-                                .foregroundColor(AppColors.GreenAccent)
-                                .shadow(color: AppColors.GlowGreen.opacity(0.7), radius: 10)
+                                .foregroundColor(.white)
                                 .padding(.leading, 2)
                         }
                     }
@@ -183,7 +145,6 @@ struct TabBarView: View {
                     )
                     .shadow(color: AppColors.ShadowColor.opacity(0.9), radius: 8, x: 0, y: 4)
 
-                    // Menu déroulant si activé
                     if showOptions {
                         VStack(alignment: .leading, spacing: 10) {
                             MenuItemView(icon: "bookmark", label: "Saved")
@@ -207,8 +168,35 @@ struct TabBarView: View {
 
                     Spacer()
                 }
+
+                // MARK: - Bouton flottant vert (Add) CENTRÉ, PLUS GRAND, PLUS BAS
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Button {
+                            showCreateModal = true
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.system(size: 24, weight: .bold))   // plus grand
+                                .foregroundColor(.black)
+                                .padding(18)                               // plus grand
+                                .background(AppColors.GreenAccent)
+                                .clipShape(Circle())
+                                .shadow(color: AppColors.ShadowColor.opacity(0.85),
+                                        radius: 10, x: 0, y: 4)
+                        }
+                        Spacer()
+                    }
+                    .padding(.bottom, 12) // très bas, proche de la TabBar
+                }
+
+                // MARK: - Rating popup overlay on top of everything
+                if ratingPromptViewModel.isPresenting {
+                    SortieRatingPromptView(viewModel: ratingPromptViewModel)
+                }
             }
-            // MARK: - Logout alert + navigation
+            // MARK: - Alert Logout
             .alert("Logout", isPresented: $showLogoutAlert, actions: {
                 Button("Cancel", role: .cancel) {}
                 Button("Confirm", role: .destructive) {
@@ -223,6 +211,7 @@ struct TabBarView: View {
                 Text("Are you sure you want to logout?")
             })
 
+            // MARK: - Navigation vers Login après logout
             NavigationLink(
                 destination: LoginView()
                     .navigationBarBackButtonHidden(true)
@@ -234,7 +223,7 @@ struct TabBarView: View {
             .opacity(0)
             .preferredColorScheme(.dark)
 
-            // MARK: - Full screen modal pour CreateSortie (bouton central)
+            // MARK: - Full screen modal pour CreateSortie (lié au bouton flottant)
             .fullScreenCover(isPresented: $showCreateModal) {
                 NavigationStack {
                     CreateSortieView()
@@ -249,25 +238,14 @@ struct TabBarView: View {
                 }
             }
         }
-    }
-
-    // MARK: - Tab item builder
-    func tabItem(icon: String, index: Int) -> some View {
-        Button(action: {
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
-                selectedTab = index
-            }
-        }) {
-            Image(systemName: icon)
-                .font(.system(size: 22))
-                .foregroundColor(selectedTab == index ? AppColors.GreenAccent : AppColors.TextSecondary)
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
+        .onAppear {
+            print("[RatingPrompt] TabBarView appeared → checking eligibility")
+            ratingPromptViewModel.onSceneBecameActive()
         }
     }
 }
 
-// MenuItemView (inchangé)
+// MARK: - Élément du menu
 struct MenuItemView: View {
     var icon: String
     var label: String
@@ -301,11 +279,5 @@ struct MenuItemView: View {
 
 #Preview {
     TabBarView()
-        .preferredColorScheme(.dark)
-}
-
-// Preview demandé pour la liste des chats
-#Preview("Chats") {
-    ChatsListView()
         .preferredColorScheme(.dark)
 }

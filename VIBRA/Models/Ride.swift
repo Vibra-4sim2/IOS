@@ -208,3 +208,13 @@ private extension KeyedDecodingContainer {
         return nil
     }
 }
+// MARK: - Creator Reference (for populated createurId)
+struct CreatorReference: Codable {
+    let id: String
+    let email: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case id = "_id"
+        case email
+    }
+}

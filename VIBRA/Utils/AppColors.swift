@@ -10,6 +10,7 @@ struct AppColors {
     static let CardDark = Color(hex: "#112820")
     static let CardGlass = Color.white.opacity(0.2)   // blanc translucide
     static let CardOverlay = Color.black.opacity(0.4)
+    static let CardBackground = CardDark
 
     // Verts principaux
     static let GreenAccent = Color(hex: "#7FDB8A")     // vert clair pour CTA

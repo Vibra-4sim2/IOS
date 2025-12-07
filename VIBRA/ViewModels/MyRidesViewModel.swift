@@ -167,19 +167,30 @@ final class MyRidesViewModel: ObservableObject {
 
     // MARK: - Actions sur les participations
 
-    /// Accepter une participation EN_ATTENTE (status -> ACCEPTEE) puis recharger les pending
-    func acceptParticipation(_ participation: Participation, forRideId rideId: String) async {
+    // MARK: - Actions sur les participations
+
+    /// Met à jour une participation (EN_ATTENTE -> ACCEPTEE / REFUSEE) puis recharge les pending
+    func updateParticipation(_ participation: Participation, to status: String, forRideId rideId: String) async {
         guard let participationId = participation.id else {
-            print("❌ acceptParticipation: participation sans id")
+            print("❌ updateParticipation: participation sans id")
             return
         }
 
         do {
-            _ = try await ParticipationService.shared.updateParticipationStatus(id: participationId, status: "ACCEPTEE")
+            _ = try await ParticipationService.shared.updateParticipationStatus(id: participationId, status: status)
             // Après MAJ, on recharge les participations en attente
             await loadPendingParticipationsForMyRides()
         } catch {
-            print("❌ acceptParticipation error:", error)
+            print("❌ updateParticipation error:", error)
         }
+    }
+
+    // Si tu veux garder la fonction d'aide pour compatibilité:
+    func acceptParticipation(_ participation: Participation, forRideId rideId: String) async {
+        await updateParticipation(participation, to: "ACCEPTEE", forRideId: rideId)
+    }
+
+    func refuseParticipation(_ participation: Participation, forRideId rideId: String) async {
+        await updateParticipation(participation, to: "REFUSEE", forRideId: rideId)
     }
 }

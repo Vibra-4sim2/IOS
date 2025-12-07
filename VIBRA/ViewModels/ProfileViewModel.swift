@@ -33,6 +33,10 @@ final class ProfileViewModel: ObservableObject {
     @Published var isFollowing: Bool = false
     @Published var isFollowLoading: Bool = false
 
+    // Rating
+    @Published var rating: UserRating?
+    @Published var isLoadingRating = false
+
     // Content counts
     @Published var sortiesCount: Int = 0
     @Published var publicationsCount: Int = 0
@@ -57,11 +61,12 @@ final class ProfileViewModel: ObservableObject {
             let fetchedUser = try await AuthService.shared.getUser(byId: userId)
             self.user = fetchedUser
 
-            // Parallel: follow stats, is-following, content lists
+            // Parallel: follow stats, is-following, content lists, rating
             async let statsTask = AuthService.shared.fetchFollowStats(for: userId)
             async let isFollowingTask = (try? AuthService.shared.checkIsFollowing(userId: userId))
             async let ridesTask = HomeService.shared.fetchRidesWithCreators()
             async let publicationsTask = PublicationService.shared.getPublicationsByAuthor(authorId: userId)
+            async let ratingTask = loadRating(for: userId)
 
             let stats = try await statsTask
             self.followersCount = stats.followersCount
@@ -87,6 +92,10 @@ final class ProfileViewModel: ObservableObject {
                 self.publications = []
                 self.publicationsCount = 0
             }
+            
+            // Wait for rating
+            await ratingTask
+            
         } catch let pError as ProfileError {
             switch pError {
             case .missingToken:
@@ -119,6 +128,21 @@ final class ProfileViewModel: ObservableObject {
             }
         } catch {
             print("❌ toggleFollow error: \(error)")
+        }
+    }
+    
+    // MARK: - Rating
+    private func loadRating(for userId: String) async {
+        isLoadingRating = true
+        defer { isLoadingRating = false }
+        do {
+            // First recompute the creator rating summary on the backend, then fetch it
+            let fetchedRating = try await RatingService.shared.refreshAndGetCreatorRating(userId: userId)
+            self.rating = fetchedRating
+            print("✅ Rating loaded: \(fetchedRating.average) stars (\(fetchedRating.count) reviews)")
+        } catch {
+            print("⚠️ Could not load rating for user \(userId): \(error)")
+            self.rating = nil
         }
     }
 

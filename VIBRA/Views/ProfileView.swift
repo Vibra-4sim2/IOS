@@ -109,6 +109,38 @@ struct ProfileView: View {
                 Text(user.email)
                     .font(.subheadline)
                     .foregroundColor(AppColors.TextSecondary)
+                
+                // DEBUG: Show rating loading state
+                if viewModel.isLoadingRating {
+                    HStack(spacing: 4) {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                        Text("Chargement du rating...")
+                            .font(.caption2)
+                            .foregroundColor(AppColors.TextSecondary)
+                    }
+                    .padding(.top, 4)
+                }
+                
+                // Rating stars
+                if let rating = viewModel.rating {
+                    HStack(spacing: 6) {
+                        StarRatingView(rating: rating.average, size: 18, color: AppColors.GreenAccent)
+                        Text(String(format: "%.1f", rating.average))
+                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .foregroundColor(AppColors.TextPrimary)
+                        Text("(\(rating.count))")
+                            .font(.caption)
+                            .foregroundColor(AppColors.TextSecondary)
+                    }
+                    .padding(.top, 4)
+                } else if !viewModel.isLoadingRating {
+                    // DEBUG: Show if no rating
+                    Text("Pas encore de notes")
+                        .font(.caption2)
+                        .foregroundColor(AppColors.TextTertiary)
+                        .padding(.top, 4)
+                }
             }
 
             HStack(spacing: 6) {

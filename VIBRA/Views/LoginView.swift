@@ -16,130 +16,174 @@ struct LoginView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Image("login_bg")
-                    .resizable()
-                    .scaledToFill()
+                // MARK: - Animated Background Gradient
+                AnimatedGradientBackground()
                     .ignoresSafeArea()
                 
-                Color.black.opacity(0.55).ignoresSafeArea()
-                
-                VStack {
-                    Spacer(minLength: 100)
-                    
-                    VStack(spacing: 24) {
+                // MARK: - Content
+                ScrollView {
+                    VStack(spacing: 0) {
+                        Spacer(minLength: 80)
                         
-                        // MARK: Header
-                        VStack(spacing: 10) {
-                            Image("logo")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 60, height: 60)
-                                .shadow(radius: 8)
-                                .padding(.bottom, 4)
+                        VStack(spacing: 32) {
                             
-                            Text("Join the ride")
-                                .foregroundColor(.white)
-                                .font(.title.bold())
-                            
-                            Text("Log in to your cycling account")
-                                .foregroundColor(.green.opacity(0.8))
-                                .font(.subheadline)
-                        }
-                        
-                        // MARK: Email & Password Fields
-                        VStack(spacing: 16) {
-                            customInputField(
-                                icon: "envelope",
-                                placeholder: "Enter your email",
-                                text: $viewModel.email,
-                                isSecure: false
-                            )
-                            
-                            customInputField(
-                                icon: "lock",
-                                placeholder: "Enter your password",
-                                text: $viewModel.password,
-                                isSecure: true
-                            )
-                            
-                            // MARK: Remember Me / Forgot Password
-                            HStack {
-                                Toggle(isOn: $rememberMe) {
-                                    Text("Remember me")
-                                        .foregroundColor(.white)
-                                }
-                                .toggleStyle(CheckboxToggleStyle())
+                            // MARK: Header
+                            VStack(spacing: 16) {
+                                Image("vibra_logo")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 80, height: 80)
+                                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                                    .shadow(color: AppColors.GlowGreen.opacity(0.6), radius: 20, x: 0, y: 8)
+                                    .padding(.bottom, 8)
                                 
-                                Spacer()
+                                Text("Welcome Back")
+                                    .foregroundColor(AppColors.TextPrimary)
+                                    .font(.system(size: 32, weight: .bold, design: .rounded))
                                 
-                                NavigationLink(destination: ResetPasswordFlowView()) {
-                                    Text("Forgot password?")
-                                        .foregroundColor(.green)
+                                Text("Log in to continue your cycling journey")
+                                    .foregroundColor(AppColors.TextSecondary)
+                                    .font(.system(size: 16, weight: .medium))
+                                    .multilineTextAlignment(.center)
+                            }
+                            .padding(.bottom, 8)
+                            
+                            // MARK: Login Card
+                            VStack(spacing: 20) {
+                                
+                                // MARK: Email & Password Fields
+                                VStack(spacing: 16) {
+                                    customInputField(
+                                        icon: "envelope.fill",
+                                        placeholder: "Email address",
+                                        text: $viewModel.email,
+                                        isSecure: false
+                                    )
+                                    
+                                    customInputField(
+                                        icon: "lock.fill",
+                                        placeholder: "Password",
+                                        text: $viewModel.password,
+                                        isSecure: true
+                                    )
                                 }
-                            }
-                            .font(.footnote)
-                        }
-                        
-                        // MARK: Login Button
-                        Button {
-                            Task {
-                                await viewModel.login(stayConnected: rememberMe)
-                            }
-                        } label: {
-                            if viewModel.isLoading {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(Color.green)
-                                    .cornerRadius(10)
-                            } else {
+                                
+                                // MARK: Remember Me / Forgot Password
                                 HStack {
-                                    Text("Log in")
+                                    Toggle(isOn: $rememberMe) {
+                                        Text("Remember me")
+                                            .foregroundColor(AppColors.TextSecondary)
+                                            .font(.system(size: 14, weight: .medium))
+                                    }
+                                    .toggleStyle(CheckboxToggleStyle())
+                                    
+                                    Spacer()
+                                    
+                                    NavigationLink(destination: ResetPasswordFlowView()) {
+                                        Text("Forgot password?")
+                                            .foregroundColor(AppColors.GreenAccent)
+                                            .font(.system(size: 14, weight: .semibold))
+                                    }
+                                }
+                                
+                                // MARK: Login Button
+                                Button {
+                                    Task {
+                                        await viewModel.login(stayConnected: rememberMe)
+                                    }
+                                } label: {
+                                    if viewModel.isLoading {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 16)
+                                            .background(AppColors.GreenAccent)
+                                            .cornerRadius(14)
+                                    } else {
+                                        HStack(spacing: 8) {
+                                            Text("Log in")
+                                                .font(.system(size: 17, weight: .bold))
+                                            Image(systemName: "arrow.right")
+                                                .font(.system(size: 16, weight: .semibold))
+                                        }
+                                        .foregroundColor(.black)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 16)
+                                        .background(AppColors.GreenAccent)
+                                        .cornerRadius(14)
+                                        .shadow(color: AppColors.GlowGreen.opacity(0.5), radius: 12, x: 0, y: 6)
+                                    }
+                                }
+                                .disabled(viewModel.isLoading)
+                                
+                            }
+                            .padding(24)
+                            .background(AppColors.CardDark)
+                            .cornerRadius(20)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .stroke(AppColors.BorderColor, lineWidth: 1)
+                            )
+                            .shadow(color: AppColors.ShadowColor.opacity(0.3), radius: 20, x: 0, y: 10)
+                            
+                            // MARK: Register Link
+                            HStack(spacing: 6) {
+                                Text("Don't have an account?")
+                                    .foregroundColor(AppColors.TextSecondary)
+                                NavigationLink(destination: RegisterView()) {
+                                    Text("Create account")
+                                        .foregroundColor(AppColors.GreenAccent)
                                         .fontWeight(.semibold)
-                                    Image(systemName: "arrow.right")
-                                }
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.green)
-                                .cornerRadius(10)
-                            }
-                        }
-                        .disabled(viewModel.isLoading)
-                        
-                        
-                        // MARK: Register Link
-                        HStack(spacing: 4) {
-                            Text("Don't have an account?")
-                                .foregroundColor(.white.opacity(0.8))
-                            NavigationLink(destination: RegisterView()) {
-                                Text("Create account")
-                                    .foregroundColor(.green)
-                            }
-                        }
-                        .font(.footnote)
-                        
-                        
-                        // MARK: Social Login Buttons
-                        HStack(spacing: 30) {
-                            ForEach(["applelogo", "globe", "f.circle"], id: \.self) { icon in
-                                Button(action: {}) {
-                                    Image(systemName: icon)
-                                        .foregroundColor(.green)
-                                        .font(.system(size: 24))
-                                        .frame(width: 55, height: 55)
-                                        .background(Color.black.opacity(0.6))
-                                        .clipShape(Circle())
                                 }
                             }
+                            .font(.system(size: 15))
+                            
+                            // MARK: Divider
+                            HStack(spacing: 16) {
+                                Rectangle()
+                                    .fill(AppColors.DividerColor)
+                                    .frame(height: 1)
+                                
+                                Text("or continue with")
+                                    .foregroundColor(AppColors.TextTertiary)
+                                    .font(.system(size: 13, weight: .medium))
+                                
+                                Rectangle()
+                                    .fill(AppColors.DividerColor)
+                                    .frame(height: 1)
+                            }
+                            .padding(.vertical, 8)
+                            
+                            // MARK: Social Login Buttons
+                            HStack(spacing: 16) {
+                                ForEach([
+                                    ("applelogo", "Apple"),
+                                    ("globe", "Google"),
+                                    ("f.circle.fill", "Facebook")
+                                ], id: \.0) { icon, name in
+                                    Button(action: {}) {
+                                        VStack(spacing: 8) {
+                                            Image(systemName: icon)
+                                                .foregroundColor(AppColors.GreenAccent)
+                                                .font(.system(size: 24, weight: .medium))
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .frame(height: 56)
+                                        .background(AppColors.CardGlass)
+                                        .cornerRadius(12)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .stroke(AppColors.BorderColor, lineWidth: 1)
+                                        )
+                                    }
+                                }
+                            }
                         }
-                        .padding(.top, 8)
+                        .padding(.horizontal, 24)
+                        .frame(maxWidth: 440)
+                        
+                        Spacer(minLength: 60)
                     }
-                    .padding(.horizontal, 30)
-                    .frame(maxWidth: 400)
-                    
-                    Spacer(minLength: 80)
                 }
                 
                 // MARK: Navigation automatique si connecté
@@ -162,46 +206,84 @@ struct LoginView: View {
         } message: {
             Text(viewModel.errorMessage ?? "Unknown error")
         }
+        .preferredColorScheme(.dark)
     }
     
     // MARK: - Custom Field
     @ViewBuilder
     private func customInputField(icon: String, placeholder: String, text: Binding<String>, isSecure: Bool) -> some View {
-        HStack {
+        HStack(spacing: 12) {
             Image(systemName: icon)
-                .foregroundColor(.green)
+                .foregroundColor(AppColors.GreenAccent)
+                .font(.system(size: 18))
+                .frame(width: 24)
             
             ZStack(alignment: .leading) {
                 if text.wrappedValue.isEmpty {
                     Text(placeholder)
-                        .foregroundColor(.green.opacity(0.7))
+                        .foregroundColor(AppColors.TextTertiary)
+                        .font(.system(size: 16))
                 }
                 
                 if isSecure {
                     SecureField("", text: text)
-                        .foregroundColor(.white)
-                        .accentColor(.green)
+                        .foregroundColor(AppColors.TextPrimary)
+                        .font(.system(size: 16))
+                        .accentColor(AppColors.GreenAccent)
                 } else {
                     TextField("", text: text)
                         .textInputAutocapitalization(.never)
                         .keyboardType(.emailAddress)
-                        .foregroundColor(.white)
-                        .accentColor(.green)
+                        .foregroundColor(AppColors.TextPrimary)
+                        .font(.system(size: 16))
+                        .accentColor(AppColors.GreenAccent)
                 }
             }
         }
-        .padding()
-        .background(Color.black.opacity(0.4))
-        .cornerRadius(10)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(AppColors.CardGlass)
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(AppColors.BorderColor, lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Animated Gradient Background
+struct AnimatedGradientBackground: View {
+    @State private var animateGradient = false
+    
+    var body: some View {
+        LinearGradient(
+            colors: [
+                AppColors.BackgroundGradientStart,
+                AppColors.BackgroundGradientEnd,
+                AppColors.GreenDark.opacity(0.3),
+                AppColors.BackgroundGradientStart
+            ],
+            startPoint: animateGradient ? .topLeading : .bottomLeading,
+            endPoint: animateGradient ? .bottomTrailing : .topTrailing
+        )
+        .onAppear {
+            withAnimation(
+                .easeInOut(duration: 5)
+                .repeatForever(autoreverses: true)
+            ) {
+                animateGradient.toggle()
+            }
+        }
     }
 }
 
 // MARK: - Checkbox Style
 struct CheckboxToggleStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
-        HStack {
+        HStack(spacing: 8) {
             Image(systemName: configuration.isOn ? "checkmark.square.fill" : "square")
-                .foregroundColor(configuration.isOn ? .green : .gray)
+                .foregroundColor(configuration.isOn ? AppColors.GreenAccent : AppColors.TextTertiary)
+                .font(.system(size: 20))
                 .onTapGesture { configuration.isOn.toggle() }
             configuration.label
         }

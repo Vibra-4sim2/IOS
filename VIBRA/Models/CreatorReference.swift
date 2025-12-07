@@ -8,7 +8,7 @@
 import Foundation
 
 // Modèle simplifié pour le createurId dans la réponse API
-struct CreatorReference: Codable {
+struct CreatorReference23: Codable {
     let id: String
     let email: String?
     

@@ -1,3 +1,4 @@
+//
 //  SortieDetailView.swift
 //  VIBRA
 //
@@ -13,13 +14,17 @@ struct SortieDetailView: View {
     private var isPreview: Bool { ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" }
     @Environment(\.dismiss) private var dismiss
 
+    // Alerte participation
+    @State private var showParticipationAlert = false
+    @State private var participationAlertMessage: String = ""
+
     init(ride: Ride, creator: User?) {
         _vm = StateObject(wrappedValue: SortieDetailViewModel(ride: ride, creator: creator))
     }
 
     var body: some View {
         ZStack {
-            // Fond gradient cohérent avec style VIBRA
+            // Fond gradient cohérent avec le style VIBRA
             LinearGradient(
                 gradient: Gradient(colors: [AppColors.BackgroundGradientStart, AppColors.BackgroundGradientEnd]),
                 startPoint: .topLeading,
@@ -27,51 +32,32 @@ struct SortieDetailView: View {
             )
             .ignoresSafeArea()
 
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 18) {
-                    heroHeader
-                        .padding(.top, 12)
-
-                    detailsCard
-                        .padding(.horizontal)
-
-                    HStack(spacing: 12) {
-                        // chips ligne 1
-                        infoChips
-                        Spacer()
-                    }
+            VStack(spacing: 0) {
+                NavigationBar
                     .padding(.horizontal)
+                    .padding(.top, 8)
 
-                    // Description + Itinéraire + Météo + Participants groupés dans une card
-                    VStack(spacing: 12) {
-                        descriptionSection
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 20) {
+                        HeroHeader
+                            .padding(.horizontal)
 
-                        // Section météo
-                        weatherSection
-
-                        Divider().background(AppColors.DividerColor)
-
-                        mapSection
-
-                        Divider().background(AppColors.DividerColor)
+                        // Carte principale contenant la majorité des infos
+                        MainInfoCard
+                            .padding(.horizontal)
 
                         // Section participants
-                        participantsSection
-                    }
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(AppColors.CardDark.opacity(0.9))
-                            .overlay(RoundedRectangle(cornerRadius: 18).stroke(AppColors.BorderColor, lineWidth: 0.6))
-                    )
-                    .padding(.horizontal)
+                        ParticipantsCard
+                            .padding(.horizontal)
+                            .padding(.bottom, 20)
 
-                    // Participants / CTA
-                    participateButton
-                        .padding(.horizontal)
-                        .padding(.bottom, 14)
+                        // Bouton Participer centré (dans le scroll mais visuellement en bas)
+                        ParticipateSection
+                            .padding(.horizontal)
+                            .padding(.bottom, 20)
+                    }
+                    .padding(.top, 4)
                 }
-                .padding(.bottom, 10)
             }
         }
         .navigationBarHidden(true)
@@ -80,28 +66,21 @@ struct SortieDetailView: View {
             if !isPreview {
                 await vm.loadRoute()
                 await vm.loadWeather()
-                await vm.loadParticipations() // IMPORTANT: charge les participations pour gérer "Déjà inscrit" + membres ACCEPTÉE
+                await vm.loadParticipations()
             }
+        }
+        .alert(isPresented: $showParticipationAlert) {
+            Alert(
+                title: Text("Participation"),
+                message: Text(participationAlertMessage),
+                dismissButton: .default(Text("OK"))
+            )
         }
     }
 
-    // MARK: - Hero Header (Image + Overlay + back)
-    private var heroHeader: some View {
-        ZStack(alignment: .topLeading) {
-            AsyncImageView(urlString: vm.ride.photo)
-                .frame(height: 240)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay(
-                    // gradient overlay pour lisibilité
-                    LinearGradient(
-                        gradient: Gradient(colors: [Color.black.opacity(0.45), Color.clear, Color.black.opacity(0.30)]),
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                )
-
-            // back button
+    // MARK: - Custom Navigation Bar
+    private var NavigationBar: some View {
+        HStack {
             Button { dismiss() } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 16, weight: .semibold))
@@ -109,73 +88,266 @@ struct SortieDetailView: View {
                     .frame(width: 38, height: 38)
                     .background(AppColors.CardGlass)
                     .clipShape(Circle())
-                    .overlay(Circle().stroke(AppColors.DividerColor, lineWidth: 0.6))
+                    .overlay(Circle().stroke(AppColors.DividerColor, lineWidth: 0.8))
                     .shadow(color: AppColors.ShadowColor, radius: 6, x: 0, y: 3)
-            }
-            .padding(.leading, 18)
-            .padding(.top, 14)
-        }
-        .padding(.horizontal)
-    }
-
-    // MARK: - Details Card
-    private var detailsCard: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(vm.ride.titre)
-                    .font(.system(size: 18, weight: .semibold, design: .rounded))
-                    .foregroundColor(AppColors.TextPrimary)
-                    .lineLimit(2)
-
-                NavigationLink(destination: {
-                    if let creator = vm.creator, let id = creator.id {
-                        ProfileView(userId: id)
-                    } else if let id = vm.creator?.id ?? vm.ride.createurId {
-                        ProfileView(userId: id)
-                    } else {
-                        ProfileView()
-                    }
-                }()) {
-                    HStack(spacing: 8) {
-                        creatorAvatar
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(vm.creatorFullName)
-                                .font(.subheadline)
-                                .foregroundColor(AppColors.TextPrimary)
-                            Text("Organisateur")
-                                .font(.caption)
-                                .foregroundColor(AppColors.TextTertiary)
-                        }
-                        Spacer()
-                    }
-                }
-                .buttonStyle(.plain)
             }
 
             Spacer()
 
-            // mini-card droite: type + date shortcut
-            VStack(alignment: .trailing, spacing: 8) {
-                Text(vm.ride.type?.capitalized ?? "")
-                    .font(.caption.weight(.semibold))
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 10)
-                    .background(AppColors.CardGlass)
-                    .cornerRadius(12)
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppColors.DividerColor, lineWidth: 0.6))
+            Text("Détail de la sortie")
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .foregroundColor(AppColors.TextPrimary)
+                .opacity(0.9)
 
-                Text(vm.dateOnly)
-                    .font(.caption2)
+            Spacer()
+
+            // Place-holder éventuellement pour un futur bouton (partage, favoris…)
+            Circle()
+                .fill(Color.clear)
+                .frame(width: 38, height: 38)
+        }
+    }
+
+    // MARK: - Hero Header (Image + overlay)
+    private var HeroHeader: some View {
+        ZStack(alignment: .bottomLeading) {
+            AsyncImageView(urlString: vm.ride.photo)
+                .frame(height: 260)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            Color.black.opacity(0.55),
+                            Color.black.opacity(0.15),
+                            Color.black.opacity(0.70)
+                        ]),
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                )
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .center, spacing: 10) {
+                    // Creator profile link
+                    if let creatorId = vm.creator?.id {
+                        NavigationLink(destination: ProfileView(userId: creatorId)) {
+                            HStack(spacing: 10) {
+                                creatorAvatar
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(vm.creatorFullName)
+                                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                        .foregroundColor(AppColors.TextPrimary)
+                                    Text("Organisateur")
+                                        .font(.caption)
+                                        .foregroundColor(AppColors.TextTertiary)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        HStack(spacing: 10) {
+                            creatorAvatar
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(vm.creatorFullName)
+                                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                    .foregroundColor(AppColors.TextPrimary)
+                                Text("Organisateur")
+                                    .font(.caption)
+                                    .foregroundColor(AppColors.TextTertiary)
+                            }
+                        }
+                    }
+
+                    Spacer()
+
+                    if let type = vm.ride.type, !type.isEmpty {
+                        Text(type.capitalized)
+                            .font(.caption.weight(.semibold))
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, 10)
+                            .background(AppColors.CardGlass)
+                            .cornerRadius(12)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(AppColors.DividerColor, lineWidth: 0.6)
+                            )
+                    }
+                }
+
+                Text(vm.ride.titre)
+                    .font(.system(size: 20, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+
+                HStack(spacing: 8) {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(AppColors.GreenAccent)
+                    Text(vm.dateOnly)
+                        .font(.caption)
+                        .foregroundColor(AppColors.TextSecondary)
+
+                    Image(systemName: "clock")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(AppColors.GreenAccent)
+                    Text(vm.timeOnly)
+                        .font(.caption)
+                        .foregroundColor(AppColors.TextSecondary)
+
+                    Spacer()
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 14)
+        }
+    }
+
+    // MARK: - Main Info Card (chips + description + météo + carte)
+    private var MainInfoCard: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            // Ligne chips info principales (distance + durée + difficulté + participants + camping)
+            InfoChipsSection
+
+            Divider().background(AppColors.DividerColor.opacity(0.7))
+
+            // Description
+            descriptionSection
+
+            // Météo
+            if hasWeatherContent {
+                Divider().background(AppColors.DividerColor.opacity(0.7))
+                weatherSection
+            }
+
+            // Carte itinéraire
+            Divider().background(AppColors.DividerColor.opacity(0.7))
+            mapSection
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(AppColors.CardDark.opacity(0.96))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18)
+                        .stroke(AppColors.BorderColor, lineWidth: 0.7)
+                )
+        )
+        .shadow(color: AppColors.ShadowColor.opacity(0.6), radius: 16, x: 0, y: 12)
+    }
+
+    // MARK: - Participants Card
+    private var ParticipantsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Participants")
+                    .font(.headline)
+                    .foregroundColor(AppColors.TextPrimary)
+
+                Spacer()
+
+                let count = max(vm.participants.count, vm.participantIds.count)
+                if count > 0 {
+                    Text("\(count) inscrit\(count > 1 ? "s" : "")")
+                        .font(.footnote)
+                        .foregroundColor(AppColors.TextSecondary)
+                }
+            }
+
+            if vm.participants.isEmpty && vm.participantIds.isEmpty {
+                Text("Aucun participant pour le moment")
+                    .font(.footnote)
                     .foregroundColor(AppColors.TextTertiary)
+            } else {
+                VStack(alignment: .leading, spacing: 10) {
+                    // Participants avec infos complètes
+                    ForEach(vm.participants, id: \.id) { user in
+                        ParticipantRow(user: user)
+                    }
+
+                    // IDs de participants sans User chargé
+                    let remainingIds = vm.participantIds.filter { pid in
+                        !vm.participants.contains(where: { $0.id == pid })
+                    }
+                    if !remainingIds.isEmpty {
+                        ForEach(remainingIds, id: \.self) { pid in
+                            HStack(spacing: 8) {
+                                Circle()
+                                    .fill(AppColors.CardGlass)
+                                    .frame(width: 32, height: 32)
+                                    .overlay(
+                                        Image(systemName: "person.fill")
+                                            .font(.system(size: 14))
+                                            .foregroundColor(AppColors.TextTertiary)
+                                    )
+                                Text("Participant \(pid.prefix(6))…")
+                                    .font(.footnote)
+                                    .foregroundColor(AppColors.TextSecondary)
+                            }
+                        }
+                    }
+                }
             }
         }
-        .padding(14)
+        .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(AppColors.CardDark.opacity(0.95))
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(AppColors.CardDark.opacity(0.96))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18)
+                        .stroke(AppColors.BorderColor, lineWidth: 0.7)
+                )
         )
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(AppColors.BorderColor, lineWidth: 0.6))
-        .shadow(color: AppColors.ShadowColor, radius: 10, x: 0, y: 6)
+        .shadow(color: AppColors.ShadowColor.opacity(0.5), radius: 12, x: 0, y: 10)
+    }
+
+    // MARK: - Bouton Participer centré + alerte
+    private var ParticipateSection: some View {
+        VStack(spacing: 10) {
+            Button {
+                Task {
+                    await vm.participate()
+
+                    if let msg = vm.participationMessage, !msg.isEmpty {
+                        participationAlertMessage = msg
+                    } else {
+                        participationAlertMessage = vm.alreadyParticipating
+                            ? "Vous êtes déjà inscrit à cette sortie."
+                            : "Votre participation a été prise en compte."
+                    }
+
+                    showParticipationAlert = true
+                }
+            } label: {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(colors: [AppColors.GreenAccent, AppColors.GreenDark]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .shadow(color: AppColors.GlowGreen.opacity(0.9), radius: 14, x: 0, y: 6)
+
+                    if vm.isParticipating {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                    } else {
+                        Text(vm.alreadyParticipating ? "Déjà inscrit" : "Participer")
+                            .font(.system(size: 16, weight: .semibold, design: .rounded))
+                            .foregroundColor(.black)
+                    }
+                }
+                .frame(height: 52)
+                .frame(maxWidth: 260)
+            }
+            .disabled(vm.isParticipating || vm.alreadyParticipating)
+            .opacity((vm.isParticipating || vm.alreadyParticipating) ? 0.9 : 1.0)
+        }
     }
 
     // MARK: - Avatar
@@ -189,8 +361,12 @@ struct SortieDetailView: View {
                     case .success(let image):
                         image.resizable().scaledToFill()
                     case .failure:
-                        Circle().fill(AppColors.CardGlass)
-                            .overlay(Image(systemName: "person.fill").foregroundColor(AppColors.TextTertiary))
+                        Circle()
+                            .fill(AppColors.CardGlass)
+                            .overlay(
+                                Image(systemName: "person.fill")
+                                    .foregroundColor(AppColors.TextTertiary)
+                            )
                     @unknown default:
                         Circle().fill(AppColors.CardGlass)
                     }
@@ -198,39 +374,55 @@ struct SortieDetailView: View {
             } else {
                 Circle()
                     .fill(AppColors.CardGlass)
-                    .overlay(Image(systemName: "person.fill").foregroundColor(AppColors.TextTertiary))
+                    .overlay(
+                        Image(systemName: "person.fill")
+                            .foregroundColor(AppColors.TextTertiary)
+                    )
             }
         }
-        .frame(width: 46, height: 46)
+        .frame(width: 44, height: 44)
         .clipShape(Circle())
-        .overlay(Circle().stroke(AppColors.DividerColor, lineWidth: 1.2))
+        .overlay(Circle().stroke(AppColors.DividerColor, lineWidth: 1.1))
         .shadow(color: AppColors.ShadowColor, radius: 6, x: 0, y: 3)
     }
 
-    // MARK: - Info Chips
-    private var infoChips: some View {
+    // MARK: - Info Chips Section (distance + temps en haut)
+    private var InfoChipsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
+            // Ligne 1 : distance + durée
             HStack(spacing: 8) {
-                chip(icon: "calendar", text: vm.dateOnly)
-                chip(icon: "clock", text: vm.timeOnly)
-                if let dist = vm.ride.distance { chip(icon: "ruler", text: distanceText(dist)) }
-                if let diff = vm.ride.difficulte, !diff.isEmpty { chip(icon: "gauge", text: diff.capitalized) }
+                if let dist = vm.ride.distance {
+                    chip(icon: "ruler", text: distanceText(dist))
+                }
+                if let duree = vm.ride.dureeEstimee {
+                    let hours = Int(duree) / 3600
+                    let mins = (Int(duree) % 3600) / 60
+                    let txt = "\(hours)h\(mins > 0 ? " \(mins)m" : "")"
+                    chip(icon: "hourglass", text: txt)
+                }
             }
 
+            // Ligne 2 : difficulté + participants + camping
             HStack(spacing: 8) {
+                if let diff = vm.ride.difficulte, !diff.isEmpty {
+                    chip(icon: "gauge", text: diff.capitalized)
+                }
+
                 let pCount = max(vm.participants.count, vm.participantIds.count)
                 let cap = vm.ride.capacite
                 if pCount > 0 || cap != nil {
-                    let label = cap != nil ? "\(pCount) / \(cap!)" : "\(pCount)"
+                    let label = cap != nil ? "\(pCount) / \(cap!) places" : "\(pCount) participant\(pCount > 1 ? "s" : "")"
                     chip(icon: "person.2", text: label)
                 }
-                if includesCamping(vm.ride) { chip(icon: "tent.fill", text: "Camping") }
+                if includesCamping(vm.ride) {
+                    chip(icon: "tent.fill", text: "Camping")
+                }
             }
         }
     }
 
     private func chip(icon: String, text: String) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Image(systemName: icon)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundColor(AppColors.GreenAccent)
@@ -239,11 +431,14 @@ struct SortieDetailView: View {
                 .foregroundColor(AppColors.TextPrimary)
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.vertical, 7)
         .background(AppColors.CardGlass)
-        .cornerRadius(12)
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppColors.DividerColor, lineWidth: 0.6))
-        .shadow(color: AppColors.ShadowColor.opacity(0.6), radius: 6, x: 0, y: 3)
+        .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(AppColors.DividerColor, lineWidth: 0.6)
+        )
+        .shadow(color: AppColors.ShadowColor.opacity(0.5), radius: 5, x: 0, y: 2)
     }
 
     private func includesCamping(_ ride: Ride) -> Bool {
@@ -273,13 +468,19 @@ struct SortieDetailView: View {
             if let s = start, let e = end {
                 RouteMapView(routeCoordinates: vm.routeCoordinates, startCoordinate: s, endCoordinate: e)
                     .frame(height: 260)
-                    .cornerRadius(14)
-                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(AppColors.DividerColor, lineWidth: 0.6))
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(AppColors.DividerColor, lineWidth: 0.6)
+                    )
             } else if let single = start ?? end {
                 SinglePointMap(center: single)
                     .frame(height: 220)
-                    .cornerRadius(12)
-                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(AppColors.DividerColor, lineWidth: 0.6))
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(AppColors.DividerColor, lineWidth: 0.6)
+                    )
             } else {
                 Text("Points de départ/arrivée non disponibles")
                     .font(.subheadline)
@@ -290,10 +491,14 @@ struct SortieDetailView: View {
     }
 
     // MARK: - Weather Section
+    private var hasWeatherContent: Bool {
+        vm.weatherAvailable || vm.isLoadingWeather || vm.weatherErrorMessage != nil
+    }
+
     private var weatherSection: some View {
         Group {
             if vm.weatherAvailable {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 10) {
                     HStack {
                         Text("Météo prévue")
                             .font(.headline)
@@ -307,7 +512,7 @@ struct SortieDetailView: View {
 
                     HStack(spacing: 12) {
                         Image(systemName: vm.weatherIconName)
-                            .font(.system(size: 24))
+                            .font(.system(size: 26))
                             .foregroundColor(AppColors.GreenAccent)
 
                         VStack(alignment: .leading, spacing: 4) {
@@ -341,6 +546,9 @@ struct SortieDetailView: View {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: AppColors.GreenAccent))
                     }
+                    Text("Récupération de la météo...")
+                        .font(.footnote)
+                        .foregroundColor(AppColors.TextSecondary)
                 }
             } else if let error = vm.weatherErrorMessage {
                 VStack(alignment: .leading, spacing: 8) {
@@ -352,99 +560,7 @@ struct SortieDetailView: View {
                         .foregroundColor(.red)
                 }
             } else {
-                // Pas de météo disponible et pas d'erreur -> ne rien afficher
                 EmptyView()
-            }
-        }
-    }
-
-    // MARK: - Participants Section
-    private var participantsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Participants")
-                    .font(.headline)
-                    .foregroundColor(AppColors.TextPrimary)
-                Spacer()
-                let count = max(vm.participants.count, vm.participantIds.count)
-                if count > 0 {
-                    Text("\(count) inscrit\(count > 1 ? "s" : "")")
-                        .font(.footnote)
-                        .foregroundColor(AppColors.TextSecondary)
-                }
-            }
-
-            if vm.participants.isEmpty && vm.participantIds.isEmpty {
-                Text("Aucun participant pour le moment")
-                    .font(.footnote)
-                    .foregroundColor(AppColors.TextTertiary)
-            } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    // Participants complets (User)
-                    ForEach(vm.participants, id: \.id) { user in
-                        ParticipantRow(user: user)
-                    }
-
-                    // IDs sans user chargé (au cas où)
-                    let remainingIds = vm.participantIds.filter { pid in
-                        !vm.participants.contains(where: { $0.id == pid })
-                    }
-                    if !remainingIds.isEmpty {
-                        ForEach(remainingIds, id: \.self) { pid in
-                            HStack(spacing: 8) {
-                                Circle()
-                                    .fill(AppColors.CardGlass)
-                                    .frame(width: 32, height: 32)
-                                    .overlay(
-                                        Image(systemName: "person.fill")
-                                            .font(.system(size: 14))
-                                            .foregroundColor(AppColors.TextTertiary)
-                                    )
-                                Text("Participant \(pid.prefix(6))…")
-                                    .font(.footnote)
-                                    .foregroundColor(AppColors.TextSecondary)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - Participate Button
-    private var participateButton: some View {
-        VStack(spacing: 10) {
-            Button {
-                Task { await vm.participate() }
-            } label: {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(LinearGradient(
-                            gradient: Gradient(colors: [AppColors.GreenAccent, AppColors.GreenDark]),
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ))
-                        .shadow(color: AppColors.GlowGreen.opacity(0.8), radius: 12, x: 0, y: 6)
-
-                    if vm.isParticipating {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .black))
-                    } else {
-                        Text(vm.alreadyParticipating ? "Déjà inscrit" : "Participer")
-                            .font(.system(size: 16, weight: .semibold, design: .rounded))
-                            .foregroundColor(.black)
-                    }
-                }
-                .frame(height: 52)
-            }
-            .disabled(vm.isParticipating || vm.alreadyParticipating)
-            .opacity((vm.isParticipating || vm.alreadyParticipating) ? 0.9 : 1.0)
-
-            if let msg = vm.participationMessage, !msg.isEmpty {
-                Text(msg)
-                    .font(.footnote)
-                    .foregroundColor(msg.lowercased().contains("échec") ? .red : AppColors.GreenAccent)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
@@ -453,7 +569,7 @@ struct SortieDetailView: View {
     private var descriptionSection: some View {
         Group {
             if let d = vm.ride.description, !d.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 8) {
                     Text("Description")
                         .font(.headline)
                         .foregroundColor(AppColors.TextPrimary)
@@ -463,14 +579,23 @@ struct SortieDetailView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             } else {
-                EmptyView()
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Description")
+                        .font(.headline)
+                        .foregroundColor(AppColors.TextPrimary)
+                    Text("Aucune description détaillée fournie pour cette sortie.")
+                        .font(.footnote)
+                        .foregroundColor(AppColors.TextTertiary)
+                }
             }
         }
     }
 
     // MARK: - Utilities
     private func distanceText(_ meters: Int) -> String {
-        if meters >= 1000 { return String(format: "%.1f km", Double(meters) / 1000.0) }
+        if meters >= 1000 {
+            return String(format: "%.1f km", Double(meters) / 1000.0)
+        }
         return "\(meters) m"
     }
 }
@@ -501,9 +626,11 @@ private struct ParticipantRow: View {
                     case .failure:
                         Circle()
                             .fill(AppColors.CardGlass)
-                            .overlay(Text(initials)
-                                .font(.caption.bold())
-                                .foregroundColor(AppColors.TextPrimary))
+                            .overlay(
+                                Text(initials)
+                                    .font(.caption.bold())
+                                    .foregroundColor(AppColors.TextPrimary)
+                            )
                     @unknown default:
                         Circle().fill(AppColors.CardGlass)
                     }
@@ -537,9 +664,10 @@ private struct ParticipantRow: View {
     }
 }
 
-// MARK: - AsyncImageView helper (réutilisable et pro)
+// MARK: - AsyncImageView helper
 private struct AsyncImageView: View {
     let urlString: String?
+
     var body: some View {
         Group {
             if let s = urlString, let url = URL(string: s) {
@@ -548,7 +676,8 @@ private struct AsyncImageView: View {
                     case .empty:
                         ZStack {
                             Rectangle().fill(AppColors.CardGlass)
-                            ProgressView().progressViewStyle(CircularProgressViewStyle(tint: AppColors.GreenAccent))
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: AppColors.GreenAccent))
                         }
                     case .success(let image):
                         image
@@ -578,14 +707,17 @@ private struct AsyncImageView: View {
     }
 }
 
-// MARK: - SinglePointMap fallback (déjà fourni)
+// MARK: - SinglePointMap fallback
 private struct SinglePointMap: View {
     let center: CLLocationCoordinate2D
     @State private var region: MKCoordinateRegion
 
     init(center: CLLocationCoordinate2D) {
         self.center = center
-        _region = State(initialValue: MKCoordinateRegion(center: center, span: MKCoordinateSpan(latitudeDelta: 0.03, longitudeDelta: 0.03)))
+        _region = State(initialValue: MKCoordinateRegion(
+            center: center,
+            span: MKCoordinateSpan(latitudeDelta: 0.03, longitudeDelta: 0.03)
+        ))
     }
 
     var body: some View {
@@ -604,26 +736,29 @@ private struct SinglePointMap: View {
 
 // MARK: - Preview
 #Preview {
+    // Exemple de JSON pour construire une Ride de test.
     let data = """
     {
       "_id": "preview1",
-      "titre": "Balade test",
-      "description": "Aperçu de la sortie — description complète pour voir l'affichage dans la vue.",
+      "titre": "Balade test au lever du soleil",
+      "description": "Aperçu de la sortie — description complète pour voir l'affichage dans la vue. Rendez-vous au parking principal à 8h, rythme tranquille, pauses photos prévues.",
       "date": "2024-06-15T09:00:00.000Z",
-      "type": "VELO",
-      "option_camping": false,
+      "type": "Vélo",
+      "option_camping": true,
       "createurId": "creator1",
-      "photo": "https://picsum.photos/800/400",
+      "photo": "https://picsum.photos/900/500",
       "capacite": 12,
-      "distance": 12500,
-      "duree_estimee": 18000,
+      "distance": 24500,
+      "dureeEstimee": 14400,
       "pointDepart": { "latitude": 45.8326, "longitude": 6.8652 },
       "pointArrivee": { "latitude": 45.9237, "longitude": 6.8694 },
       "difficulte": "moyen",
-      "participantIds": ["u1","u2"]
+      "participantIds": ["u1","u2","u3"]
     }
     """.data(using: .utf8)!
+
     let ride = try! JSONDecoder().decode(Ride.self, from: data)
+
     let creator = User(
         id: "creator1",
         firstName: "Mohamed",
@@ -637,5 +772,8 @@ private struct SinglePointMap: View {
         followersCount: nil,
         followingCount: nil
     )
-    return NavigationStack { SortieDetailView(ride: ride, creator: creator) }
+
+    NavigationStack {
+        SortieDetailView(ride: ride, creator: creator)
+    }
 }
