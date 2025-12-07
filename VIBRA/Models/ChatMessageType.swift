@@ -19,6 +19,7 @@ enum ChatMessageType22: String, Codable, CaseIterable {
     case audio = "audio"      // Message vocal
     case file = "file"
     case system = "system"
+    case poll = "poll"
     
     var displayName: String {
         switch self {
@@ -28,6 +29,7 @@ enum ChatMessageType22: String, Codable, CaseIterable {
         case .audio: return "Message vocal"
         case .file: return "Fichier"
         case .system: return "Système"
+        case .poll: return "Sondage"
         }
     }
     
@@ -39,6 +41,7 @@ enum ChatMessageType22: String, Codable, CaseIterable {
         case .audio: return "waveform"
         case .file: return "doc"
         case .system: return "info.circle"
+        case .poll: return "chart.bar.xaxis"
         }
     }
 }

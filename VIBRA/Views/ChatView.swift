@@ -253,13 +253,26 @@ struct ChatView: View {
                     .font(.subheadline)
                     .foregroundColor(isMe ? .black : AppColors.TextPrimary)
             }
-            
         case .image:
             imageMessageView(msg)
-            
         case .audio:
             audioMessageView(msg, isMe: isMe)
-            
+        case .poll:
+            if msg.poll != nil {
+                PollMessageView(
+                    message: msg,
+                    currentUserId: vm.userId,
+                    onVote: { optionIds in vm.vote(on: msg, optionIds: optionIds) },
+                    onClose: { vm.closePoll(message: msg) },
+                    onShowVoters: { optionId in
+                        print("Voir les votants pour option:", optionId)
+                    }
+                )
+            } else {
+                Text("[Sondage non disponible]")
+                    .font(.caption)
+                    .foregroundColor(AppColors.TextSecondary)
+            }
         default:
             Text("[\(msg.type.displayName)]")
                 .font(.caption)
@@ -424,6 +437,16 @@ struct ChatView: View {
             }
             
             HStack(spacing: 8) {
+                // Bouton sondage
+                Button {
+                    vm.openPollSheet()
+                } label: {
+                    Image(systemName: "chart.bar.xaxis")
+                        .foregroundColor(AppColors.GreenAccent)
+                        .padding(8)
+                }
+                .disabled(vm.audioRecorder.isRecording || vm.isUploadingMedia)
+                
                 // Bouton image
                 PhotosPicker(
                     selection: $selectedPhoto,
@@ -504,6 +527,20 @@ struct ChatView: View {
             Task {
                 await handleSelectedPhoto(newValue)
             }
+        }
+        .sheet(isPresented: $vm.isPresentingPollSheet) {
+            PollCreationView(
+                question: $vm.pollQuestion,
+                options: $vm.pollOptions,
+                allowMultiple: $vm.pollAllowMultiple,
+                closesAt: $vm.pollClosesAt,
+                onAddOption: { vm.addPollOptionField() },
+                onRemoveOption: { vm.removePollOptionField(at: $0) },
+                onCancel: { vm.resetPollDraft() },
+                onCreate: {
+                    vm.createPoll()
+                }
+            )
         }
     }
     

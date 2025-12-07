@@ -14,6 +14,7 @@ enum ChatMessageType: String, Codable, CaseIterable {
     case audio = "audio"      // Message vocal
     case file = "file"
     case system = "system"
+    case poll = "poll"
     
     var displayName: String {
         switch self {
@@ -23,6 +24,7 @@ enum ChatMessageType: String, Codable, CaseIterable {
         case .audio: return "Message vocal"
         case .file: return "Fichier"
         case .system: return "Système"
+        case .poll: return "Sondage"
         }
     }
     
@@ -34,6 +36,7 @@ enum ChatMessageType: String, Codable, CaseIterable {
         case .audio: return "waveform"
         case .file: return "doc"
         case .system: return "info.circle"
+        case .poll: return "chart.bar.xaxis"
         }
     }
 }
@@ -116,6 +119,7 @@ struct ChatMessage: Identifiable, Decodable {
     let replyTo: String?
     let createdAt: String?
     let updatedAt: String?
+    let poll: Poll?
 
     enum CodingKeys: String, CodingKey {
         case id = "_id"
@@ -136,6 +140,7 @@ struct ChatMessage: Identifiable, Decodable {
         case replyTo
         case createdAt
         case updatedAt
+        case poll
     }
 
     // Décodage personnalisé pour utiliser SenderRef
@@ -168,6 +173,7 @@ struct ChatMessage: Identifiable, Decodable {
         self.replyTo = try container.decodeIfPresent(String.self, forKey: .replyTo)
         self.createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
         self.updatedAt = try container.decodeIfPresent(String.self, forKey: .updatedAt)
+        self.poll = try container.decodeIfPresent(Poll.self, forKey: .poll)
     }
 
     var createdDate: Date? {
@@ -178,4 +184,102 @@ struct ChatMessage: Identifiable, Decodable {
     }
 
     var isSystem: Bool { type == .system }
+    
+    // Helper pour créer un message de poll ou mettre à jour le poll d'un message existant
+    func withUpdatedPoll(_ newPoll: Poll) -> ChatMessage {
+        return ChatMessage(
+            id: self.id,
+            chatId: self.chatId,
+            sortieId: self.sortieId,
+            senderId: self.senderId,
+            sender: self.sender,
+            type: .poll,
+            content: self.content,
+            mediaUrl: self.mediaUrl,
+            thumbnailUrl: self.thumbnailUrl,
+            mediaDuration: self.mediaDuration,
+            fileSize: self.fileSize,
+            fileName: self.fileName,
+            mimeType: self.mimeType,
+            location: self.location,
+            readBy: self.readBy,
+            isDeleted: self.isDeleted,
+            replyTo: self.replyTo,
+            createdAt: self.createdAt,
+            updatedAt: self.updatedAt,
+            poll: newPoll
+        )
+    }
+    
+    // Initializer pour créer un message de poll depuis un Poll
+    static func createPollMessage(from poll: Poll, sender: ChatUser?) -> ChatMessage {
+        let now = ISO8601DateFormatter().string(from: Date())
+        return ChatMessage(
+            id: UUID().uuidString, // Temporary ID
+            chatId: poll.chatId,
+            sortieId: "", // Will be filled when received
+            senderId: poll.creatorId,
+            sender: sender,
+            type: .poll,
+            content: poll.question,
+            mediaUrl: nil,
+            thumbnailUrl: nil,
+            mediaDuration: nil,
+            fileSize: nil,
+            fileName: nil,
+            mimeType: nil,
+            location: nil,
+            readBy: [],
+            isDeleted: false,
+            replyTo: nil,
+            createdAt: poll.createdAt ?? now,
+            updatedAt: poll.updatedAt ?? now,
+            poll: poll
+        )
+    }
+    
+    // Public initializer
+    init(
+        id: String,
+        chatId: String,
+        sortieId: String,
+        senderId: String?,
+        sender: ChatUser?,
+        type: ChatMessageType,
+        content: String?,
+        mediaUrl: String?,
+        thumbnailUrl: String?,
+        mediaDuration: Double?,
+        fileSize: Int?,
+        fileName: String?,
+        mimeType: String?,
+        location: ChatLocation?,
+        readBy: [String],
+        isDeleted: Bool,
+        replyTo: String?,
+        createdAt: String?,
+        updatedAt: String?,
+        poll: Poll?
+    ) {
+        self.id = id
+        self.chatId = chatId
+        self.sortieId = sortieId
+        self.senderId = senderId
+        self.sender = sender
+        self.type = type
+        self.content = content
+        self.mediaUrl = mediaUrl
+        self.thumbnailUrl = thumbnailUrl
+        self.mediaDuration = mediaDuration
+        self.fileSize = fileSize
+        self.fileName = fileName
+        self.mimeType = mimeType
+        self.location = location
+        self.readBy = readBy
+        self.isDeleted = isDeleted
+        self.replyTo = replyTo
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.poll = poll
+    }
 }

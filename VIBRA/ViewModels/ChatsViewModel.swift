@@ -42,6 +42,13 @@ final class ChatsViewModel: ObservableObject {
     @Published var isSomeoneTyping: Bool = false
     @Published var isUploadingMedia: Bool = false
     
+    // MARK: - POLL
+    @Published var isPresentingPollSheet: Bool = false
+    @Published var pollQuestion: String = ""
+    @Published var pollOptions: [String] = ["", ""]
+    @Published var pollAllowMultiple: Bool = false
+    @Published var pollClosesAt: Date? = nil
+    
     // Audio recorder & player
     var audioRecorder = AudioRecorderManager()
     var audioPlayer = AudioPlayerManager()
@@ -73,12 +80,6 @@ final class ChatsViewModel: ObservableObject {
             Task { await loadChatMessages() }
             setupSocket(forSortieId: sortieId)
         }
-    }
-    
-    deinit {
-        socketManager?.disconnect()
-        // Le nettoyage audio sera fait automatiquement par ARC
-        // ou peut être géré dans onDisappear de la vue
     }
 
     var navigationTitle: String {
@@ -139,7 +140,73 @@ final class ChatsViewModel: ObservableObject {
         chatErrorMessage = nil
         do {
             let loaded = try await ChatService.shared.fetchMessages(sortieId: sortieId)
-            self.messages = loaded.sorted { ($0.createdDate ?? .distantPast) < ($1.createdDate ?? .distantPast) }
+            var sortedMessages = loaded.sorted { ($0.createdDate ?? .distantPast) < ($1.createdDate ?? .distantPast) }
+            
+            // Check if there are any poll messages without poll data
+            let hasPollMessagesWithoutData = sortedMessages.contains { $0.type == .poll && $0.poll == nil }
+            
+            if hasPollMessagesWithoutData {
+                print("🔍 [ChatsViewModel] Found poll messages without data, fetching polls...")
+                
+                // Get the chatId from the first message (they all have the same chatId)
+                if let chatId = sortedMessages.first?.chatId {
+                    do {
+                        // Fetch all polls for this chat
+                        let pollsResponse = try await PollService.shared.getChatPolls(chatId: chatId, page: 1, limit: 100)
+                        let polls = pollsResponse.polls
+                        print("✅ [ChatsViewModel] Fetched \(polls.count) polls for chat")
+                        
+                        // Match polls to messages
+                        for (index, message) in sortedMessages.enumerated() {
+                            if message.type == .poll && message.poll == nil {
+                                print("🔍 [ChatsViewModel] Trying to match message at index \(index), content=\(message.content ?? "nil")")
+                                
+                                // Try to find matching poll by question in content field
+                                if let question = message.content,
+                                   let matchingPoll = polls.first(where: { $0.question == question }) {
+                                    let updatedMessage = message.withUpdatedPoll(matchingPoll)
+                                    sortedMessages[index] = updatedMessage
+                                    print("✅ [ChatsViewModel] Matched poll '\(question)' to message by question")
+                                } else if let messageDate = message.createdDate,
+                                          let matchingPoll = polls.first(where: { poll in
+                                    guard let pollDate = poll.createdDate else { return false }
+                                    return abs(pollDate.timeIntervalSince1970 - messageDate.timeIntervalSince1970) < 5.0
+                                }) {
+                                    // Fallback 1: try to match by creation time (within 5 seconds - increased tolerance)
+                                    let updatedMessage = message.withUpdatedPoll(matchingPoll)
+                                    sortedMessages[index] = updatedMessage
+                                    print("✅ [ChatsViewModel] Matched poll by timestamp to message (time diff < 5s)")
+                                } else if let content = message.content, !content.isEmpty, content.count == 24 {
+                                    // Fallback 2: content might be a MongoDB ObjectId (24 hex chars)
+                                    if let matchingPoll = polls.first(where: { $0.id == content }) {
+                                        let updatedMessage = message.withUpdatedPoll(matchingPoll)
+                                        sortedMessages[index] = updatedMessage
+                                        print("✅ [ChatsViewModel] Matched poll by ID in content field")
+                                    } else {
+                                        print("❌ [ChatsViewModel] Content looks like an ID but no matching poll found: \(content)")
+                                    }
+                                } else {
+                                    print("❌ [ChatsViewModel] Could not match poll for message with content=\(message.content ?? "nil"), trying last resort...")
+                                    
+                                    // Last resort: match by order if we have unmatchedpolls
+                                    let unmatchedPolls = polls.filter { poll in
+                                        !sortedMessages.contains(where: { $0.poll?.id == poll.id })
+                                    }
+                                    if let firstUnmatchedPoll = unmatchedPolls.first {
+                                        let updatedMessage = message.withUpdatedPoll(firstUnmatchedPoll)
+                                        sortedMessages[index] = updatedMessage
+                                        print("⚠️ [ChatsViewModel] Matched poll by order (last resort): \(firstUnmatchedPoll.question)")
+                                    }
+                                }
+                            }
+                        }
+                    } catch {
+                        print("❌ [ChatsViewModel] Failed to fetch chat polls: \(error)")
+                    }
+                }
+            }
+            
+            self.messages = sortedMessages
         } catch {
             self.chatErrorMessage = "Erreur de chargement du chat: \(error.localizedDescription)"
             self.messages = []
@@ -323,6 +390,89 @@ final class ChatsViewModel: ObservableObject {
         audioPlayer.seek(to: time)
     }
     
+    // MARK: - Poll
+    
+    func openPollSheet() {
+        isPresentingPollSheet = true
+    }
+    
+    func resetPollDraft() {
+        pollQuestion = ""
+        pollOptions = ["", ""]
+        pollAllowMultiple = false
+        pollClosesAt = nil
+    }
+    
+    func addPollOptionField() {
+        pollOptions.append("")
+    }
+    
+    func removePollOptionField(at index: Int) {
+        guard pollOptions.count > 2, index < pollOptions.count else { return }
+        pollOptions.remove(at: index)
+    }
+    
+    func createPoll() {
+        guard case .chat = mode, let sortieId = chatSortieId else { return }
+        guard !pollQuestion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            chatErrorMessage = "La question du sondage ne peut pas être vide"
+            return
+        }
+        
+        let validOptions = pollOptions.compactMap { opt in
+            let trimmed = opt.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        
+        guard validOptions.count >= 2 else {
+            chatErrorMessage = "Un sondage doit avoir au moins 2 options"
+            return
+        }
+        
+        guard let socketManager = socketManager else {
+            chatErrorMessage = "Connexion temps réel non initialisée"
+            return
+        }
+        
+        let payload = CreatePollPayload(
+            question: pollQuestion,
+            options: validOptions,
+            allowMultiple: pollAllowMultiple,
+            closesAt: pollClosesAt
+        )
+        
+        socketManager.sendCreatePoll(sortieId: sortieId, poll: payload)
+        isPresentingPollSheet = false
+        resetPollDraft()
+    }
+    
+    func vote(on message: ChatMessage, optionIds: [String]) {
+        guard !optionIds.isEmpty else { return }
+        guard let poll = message.poll else { return }
+        guard !poll.isClosed else {
+            chatErrorMessage = "Ce sondage est terminé."
+            return
+        }
+        guard let socketManager = socketManager else {
+            chatErrorMessage = "Connexion temps réel non initialisée"
+            return
+        }
+        socketManager.sendVotePoll(pollId: poll.id, optionIds: optionIds)
+    }
+    
+    func closePoll(message: ChatMessage) {
+        guard let poll = message.poll else { return }
+        guard let currentUserId = currentUserId, poll.creatorId == currentUserId else {
+            chatErrorMessage = "Seul le créateur du sondage peut le fermer."
+            return
+        }
+        guard let socketManager = socketManager else {
+            chatErrorMessage = "Connexion temps réel non initialisée"
+            return
+        }
+        socketManager.sendClosePoll(pollId: poll.id)
+    }
+    
     // MARK: - Socket.IO
     
     private func setupSocket(forSortieId sortieId: String) {
@@ -350,7 +500,77 @@ final class ChatsViewModel: ObservableObject {
                 self.isWebSocketConnected = false
             case .joinedRoom(let sId, let msgs):
                 guard sId == self.chatSortieId else { return }
-                self.messages = msgs.sorted { ($0.createdDate ?? .distantPast) < ($1.createdDate ?? .distantPast) }
+                print("🔥 [ChatsViewModel] joinedRoom received with \(msgs.count) messages")
+                
+                // Sort messages by creation date
+                var sortedMsgs = msgs.sorted { ($0.createdDate ?? .distantPast) < ($1.createdDate ?? .distantPast) }
+                
+                // Check if there are poll messages without poll data
+                let hasPollMessagesWithoutData = sortedMsgs.contains { $0.type == .poll && $0.poll == nil }
+                
+                if hasPollMessagesWithoutData {
+                    print("🔍 [ChatsViewModel] joinedRoom has poll messages without data, fetching polls...")
+                    
+                    // Get the chatId from the first message
+                    if let chatId = sortedMsgs.first?.chatId {
+                        Task {
+                            do {
+                                // Fetch all polls for this chat
+                                let pollsResponse = try await PollService.shared.getChatPolls(chatId: chatId, page: 1, limit: 100)
+                                let polls = pollsResponse.polls
+                                print("✅ [ChatsViewModel] Fetched \(polls.count) polls for joinedRoom")
+                                
+                                // Match polls to messages using the same logic as loadChatMessages
+                                for (index, message) in sortedMsgs.enumerated() {
+                                    if message.type == .poll && message.poll == nil {
+                                        // Try matching by question
+                                        if let question = message.content,
+                                           let matchingPoll = polls.first(where: { $0.question == question }) {
+                                            sortedMsgs[index] = message.withUpdatedPoll(matchingPoll)
+                                            print("✅ [ChatsViewModel] Matched poll '\(question)' in joinedRoom by question")
+                                        } else if let messageDate = message.createdDate,
+                                                  let matchingPoll = polls.first(where: { poll in
+                                            guard let pollDate = poll.createdDate else { return false }
+                                            return abs(pollDate.timeIntervalSince1970 - messageDate.timeIntervalSince1970) < 5.0
+                                        }) {
+                                            sortedMsgs[index] = message.withUpdatedPoll(matchingPoll)
+                                            print("✅ [ChatsViewModel] Matched poll in joinedRoom by timestamp")
+                                        } else if let content = message.content, !content.isEmpty, content.count == 24,
+                                                  let matchingPoll = polls.first(where: { $0.id == content }) {
+                                            sortedMsgs[index] = message.withUpdatedPoll(matchingPoll)
+                                            print("✅ [ChatsViewModel] Matched poll in joinedRoom by ID")
+                                        } else {
+                                            // Last resort: match by order
+                                            let unmatchedPolls = polls.filter { poll in
+                                                !sortedMsgs.contains(where: { $0.poll?.id == poll.id })
+                                            }
+                                            if let firstUnmatchedPoll = unmatchedPolls.first {
+                                                sortedMsgs[index] = message.withUpdatedPoll(firstUnmatchedPoll)
+                                                print("⚠️ [ChatsViewModel] Matched poll in joinedRoom by order: \(firstUnmatchedPoll.question)")
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Update messages on main thread
+                                await MainActor.run {
+                                    self.messages = sortedMsgs
+                                    print("✅ [ChatsViewModel] Updated messages from joinedRoom with polls")
+                                }
+                            } catch {
+                                print("❌ [ChatsViewModel] Failed to fetch polls for joinedRoom: \(error)")
+                                await MainActor.run {
+                                    self.messages = sortedMsgs
+                                }
+                            }
+                        }
+                    } else {
+                        self.messages = sortedMsgs
+                    }
+                } else {
+                    self.messages = sortedMsgs
+                    print("✅ [ChatsViewModel] joinedRoom messages set (no poll fetching needed)")
+                }
             case .newMessage(let msg, let sId):
                 guard sId == self.chatSortieId else { return }
                 self.appendIncomingMessage(msg)
@@ -361,6 +581,29 @@ final class ChatsViewModel: ObservableObject {
                 break
             case .onlineUsers:
                 break
+            case .pollCreated(let poll, _):
+                print("📩 pollCreated received:", poll.id)
+                let pollMessage = ChatMessage.createPollMessage(from: poll, sender: nil)
+                self.appendIncomingMessage(pollMessage)
+                
+            case .pollVoted(let poll, _, _, _):
+                print("📩 pollVoted received:", poll.id)
+                if let index = self.messages.firstIndex(where: { $0.poll?.id == poll.id }) {
+                    let updatedMessage = self.messages[index].withUpdatedPoll(poll)
+                    self.messages[index] = updatedMessage
+                    print("✅ Poll updated in message at index \(index)")
+                } else {
+                    let pollMessage = ChatMessage.createPollMessage(from: poll, sender: nil)
+                    self.appendIncomingMessage(pollMessage)
+                }
+                
+            case .pollClosed(let poll, _):
+                print("📩 pollClosed received:", poll.id)
+                if let index = self.messages.firstIndex(where: { $0.poll?.id == poll.id }) {
+                    let updatedMessage = self.messages[index].withUpdatedPoll(poll)
+                    self.messages[index] = updatedMessage
+                    print("✅ Poll closed and updated in message at index \(index)")
+                }
             case .error(let message):
                 self.chatErrorMessage = message
             }

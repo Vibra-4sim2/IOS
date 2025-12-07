@@ -49,7 +49,10 @@ struct SortieDetailView: View {
                         // Section participants
                         ParticipantsCard
                             .padding(.horizontal)
-                            .padding(.bottom, 20)
+
+                        // Bouton Analyser IA
+                        AIAnalysisButton
+                            .padding(.horizontal)
 
                         // Bouton Participer centré (dans le scroll mais visuellement en bas)
                         ParticipateSection
@@ -129,15 +132,36 @@ struct SortieDetailView: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .center, spacing: 10) {
-                    creatorAvatar
+                    // Creator profile link
+                    if let creatorId = vm.creator?.id {
+                        NavigationLink(destination: ProfileView(userId: creatorId)) {
+                            HStack(spacing: 10) {
+                                creatorAvatar
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(vm.creatorFullName)
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
-                            .foregroundColor(AppColors.TextPrimary)
-                        Text("Organisateur")
-                            .font(.caption)
-                            .foregroundColor(AppColors.TextTertiary)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(vm.creatorFullName)
+                                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                        .foregroundColor(AppColors.TextPrimary)
+                                    Text("Organisateur")
+                                        .font(.caption)
+                                        .foregroundColor(AppColors.TextTertiary)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    } else {
+                        HStack(spacing: 10) {
+                            creatorAvatar
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(vm.creatorFullName)
+                                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                    .foregroundColor(AppColors.TextPrimary)
+                                Text("Organisateur")
+                                    .font(.caption)
+                                    .foregroundColor(AppColors.TextTertiary)
+                            }
+                        }
                     }
 
                     Spacer()
@@ -281,6 +305,49 @@ struct SortieDetailView: View {
                 )
         )
         .shadow(color: AppColors.ShadowColor.opacity(0.5), radius: 12, x: 0, y: 10)
+    }
+
+    // MARK: - Bouton Analyser IA
+    private var AIAnalysisButton: some View {
+        Group {
+            if let sortieId = vm.ride.id, !sortieId.isEmpty {
+                NavigationLink(destination: SortieAnalysisView(
+                    sortieId: sortieId,
+                    sortieTitle: vm.ride.titre
+                )) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 18))
+                            .foregroundColor(AppColors.TealAccent)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Analyser avec IA")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(AppColors.TextPrimary)
+                            Text("Conseils personnalisés")
+                                .font(.caption)
+                                .foregroundColor(AppColors.TextSecondary)
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14))
+                            .foregroundColor(AppColors.TextTertiary)
+                    }
+                    .padding(16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(AppColors.TealAccent.opacity(0.15))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(AppColors.TealAccent, lineWidth: 1.5)
+                            )
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+        }
     }
 
     // MARK: - Bouton Participer centré + alerte

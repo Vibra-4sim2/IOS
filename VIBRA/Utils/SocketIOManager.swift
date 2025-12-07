@@ -19,6 +19,9 @@ final class SocketIOManager {
         case typing(userId: String, sortieId: String, isTyping: Bool)
         case messageRead(messageId: String, userId: String, sortieId: String)
         case onlineUsers(sortieId: String, userIds: [String], count: Int)
+        case pollCreated(Poll, chatId: String)
+        case pollVoted(Poll, chatId: String, userId: String, optionIds: [String])
+        case pollClosed(Poll, chatId: String)
         case error(String)
     }
     
@@ -178,6 +181,35 @@ final class SocketIOManager {
         socket?.emit("markAsRead", payload)
     }
     
+    func sendCreatePoll(sortieId: String, poll: CreatePollPayload) {
+        let payload: [String: Any] = [
+            "sortieId": sortieId,
+            "poll": [
+                "question": poll.question,
+                "options": poll.options,
+                "allowMultiple": poll.allowMultiple,
+                "closesAt": poll.closesAtISO as Any
+            ].compactMapValues { $0 }
+        ]
+        print("📤 [SocketIO] poll.create payload:", payload)
+        socket?.emit("poll.create", payload)
+    }
+    
+    func sendVotePoll(pollId: String, optionIds: [String]) {
+        let payload: [String: Any] = [
+            "pollId": pollId,
+            "vote": ["optionIds": optionIds]
+        ]
+        print("📤 [SocketIO] poll.vote payload:", payload)
+        socket?.emit("poll.vote", payload)
+    }
+    
+    func sendClosePoll(pollId: String) {
+        let payload: [String: Any] = ["pollId": pollId]
+        print("📤 [SocketIO] poll.close payload:", payload)
+        socket?.emit("poll.close", payload)
+    }
+    
     // MARK: - Handlers de base
     
     private func setupBasicHandlers(socket: SocketIOClient) {
@@ -328,5 +360,78 @@ final class SocketIOManager {
                 self.onEvent?(.error(message))
             }
         }
+        
+        socket.on("poll.created") { [weak self] data, _ in
+            print("🔥 [SocketIO] event 'poll.created' raw:", data)
+            guard
+                let self = self,
+                let dict = data.first as? [String: Any],
+                let pollDict = dict["poll"],
+                let chatId = (pollDict as? [String: Any])?["chatId"] as? String
+            else { return }
+            do {
+                let json = try JSONSerialization.data(withJSONObject: pollDict, options: [])
+                let poll = try JSONDecoder().decode(Poll.self, from: json)
+                DispatchQueue.main.async {
+                    self.onEvent?(.pollCreated(poll, chatId: chatId))
+                }
+            } catch {
+                print("❌ [SocketIO] decode poll.created failed:", error)
+            }
+        }
+        
+        socket.on("poll.voted") { [weak self] data, _ in
+            print("🔥 [SocketIO] event 'poll.voted' raw:", data)
+            guard
+                let self = self,
+                let dict = data.first as? [String: Any],
+                let pollDict = dict["poll"],
+                let userId = dict["userId"] as? String,
+                let optionIds = dict["optionIds"] as? [String],
+                let chatId = (pollDict as? [String: Any])?["chatId"] as? String
+            else { return }
+            do {
+                let json = try JSONSerialization.data(withJSONObject: pollDict, options: [])
+                let poll = try JSONDecoder().decode(Poll.self, from: json)
+                DispatchQueue.main.async {
+                    self.onEvent?(.pollVoted(poll, chatId: chatId, userId: userId, optionIds: optionIds))
+                }
+            } catch {
+                print("❌ [SocketIO] decode poll.voted failed:", error)
+            }
+        }
+        
+        socket.on("poll.closed") { [weak self] data, _ in
+            print("🔥 [SocketIO] event 'poll.closed' raw:", data)
+            guard
+                let self = self,
+                let dict = data.first as? [String: Any],
+                let pollDict = dict["poll"],
+                let chatId = (pollDict as? [String: Any])?["chatId"] as? String
+            else { return }
+            do {
+                let json = try JSONSerialization.data(withJSONObject: pollDict, options: [])
+                let poll = try JSONDecoder().decode(Poll.self, from: json)
+                DispatchQueue.main.async {
+                    self.onEvent?(.pollClosed(poll, chatId: chatId))
+                }
+            } catch {
+                print("❌ [SocketIO] decode poll.closed failed:", error)
+            }
+        }
+    }
+}
+
+struct CreatePollPayload {
+    let question: String
+    let options: [String]
+    let allowMultiple: Bool
+    let closesAt: Date?
+
+    var closesAtISO: String? {
+        guard let closesAt = closesAt else { return nil }
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return iso.string(from: closesAt)
     }
 }

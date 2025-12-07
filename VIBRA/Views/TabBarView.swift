@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct TabBarView: View {
+    @EnvironmentObject var ratingPromptViewModel: RatingPromptViewModel
     @State private var showOptions = false
     @State private var showLogoutAlert = false
     @State private var isLoggedOut = false
@@ -189,6 +190,11 @@ struct TabBarView: View {
                     }
                     .padding(.bottom, 12) // très bas, proche de la TabBar
                 }
+
+                // MARK: - Rating popup overlay on top of everything
+                if ratingPromptViewModel.isPresenting {
+                    SortieRatingPromptView(viewModel: ratingPromptViewModel)
+                }
             }
             // MARK: - Alert Logout
             .alert("Logout", isPresented: $showLogoutAlert, actions: {
@@ -231,6 +237,10 @@ struct TabBarView: View {
                         .preferredColorScheme(.dark)
                 }
             }
+        }
+        .onAppear {
+            print("[RatingPrompt] TabBarView appeared → checking eligibility")
+            ratingPromptViewModel.onSceneBecameActive()
         }
     }
 }
