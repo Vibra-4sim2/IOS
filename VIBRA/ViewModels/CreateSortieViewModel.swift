@@ -70,6 +70,13 @@ final class CreateSortieViewModel: ObservableObject {
     @Published var successMessage: String? = nil
     @Published var showSuccessAlert: Bool = false
     
+    // MARK: - AI Itinerary
+    
+    @Published var isGeneratingAIRoute: Bool = false
+    @Published var aiItineraryResponse: AIItineraryResponse? = nil
+    @Published var aiContext: String = ""
+    @Published var showAIRecommendations: Bool = false
+    
     private let service: SortieService
     private let locationManager = CLLocationManager()
     private let searchCompleter = MKLocalSearchCompleter()
@@ -171,7 +178,7 @@ final class CreateSortieViewModel: ObservableObject {
         }
         
         let search = MKLocalSearch(request: request)
-        search.start { [weak self] response, error in
+        search.start { [weak self] response, _ in
             guard let self = self else { return }
             
             DispatchQueue.main.async {
@@ -195,7 +202,6 @@ final class CreateSortieViewModel: ObservableObject {
         departAddressText = mapItem.name ?? mapItem.placemark.title ?? ""
         departSearchResults = []
         
-        // Géocodage inverse pour obtenir l'adresse complète
         reverseGeocode(coordinate: mapItem.placemark.coordinate) { [weak self] address in
             if let address = address {
                 self?.departAddressText = address
@@ -208,7 +214,6 @@ final class CreateSortieViewModel: ObservableObject {
         arriveeAddressText = mapItem.name ?? mapItem.placemark.title ?? ""
         arriveeSearchResults = []
         
-        // Géocodage inverse pour obtenir l'adresse complète
         reverseGeocode(coordinate: mapItem.placemark.coordinate) { [weak self] address in
             if let address = address {
                 self?.arriveeAddressText = address
@@ -248,7 +253,6 @@ final class CreateSortieViewModel: ObservableObject {
     func setStartCoordinate(_ coord: CLLocationCoordinate2D) {
         startCoordinate = coord
         
-        // Géocodage inverse pour mettre à jour l'adresse
         reverseGeocode(coordinate: coord) { [weak self] address in
             if let address = address {
                 DispatchQueue.main.async {
@@ -261,7 +265,6 @@ final class CreateSortieViewModel: ObservableObject {
     func setEndCoordinate(_ coord: CLLocationCoordinate2D) {
         endCoordinate = coord
         
-        // Géocodage inverse pour mettre à jour l'adresse
         reverseGeocode(coordinate: coord) { [weak self] address in
             if let address = address {
                 DispatchQueue.main.async {
@@ -311,6 +314,171 @@ final class CreateSortieViewModel: ObservableObject {
         }
         
         isFetchingRoute = false
+    }
+    
+    // MARK: - Itinéraire IA
+    
+    func generateAIItinerary() async {
+        guard let start = startCoordinate, let end = endCoordinate else {
+            showValidationError("Veuillez choisir un point de départ et un point d'arrivée.")
+            return
+        }
+        
+        isGeneratingAIRoute = true
+        errorMessage = nil
+        showErrorAlert = false
+        
+        do {
+            let aiResponse = try await AIService.shared.generateAIItinerary(
+                start: start,
+                end: end,
+                startName: departAddressText.isEmpty ? nil : departAddressText,
+                endName: arriveeAddressText.isEmpty ? nil : arriveeAddressText,
+                context: aiContext.isEmpty ? nil : aiContext,
+                activityType: type
+            )
+            
+            self.aiItineraryResponse = aiResponse
+            
+            // Décoder la polyline IA avec fallback de précision pour fiabilité du tracé
+            var decoded = decodePolylineUniversal(aiResponse.itinerary.geometry)
+            decoded = fixDecodedRoute(decoded, start: start, end: end)
+            self.routeCoordinates = decoded
+            
+            // Construire l'ItineraireDTO cohérent avec les coordonnées décodées
+            let summary = aiResponse.itinerary.summary
+            let distanceMeters = summary.distance * 1000
+            let durationSeconds = summary.duration * 60
+            let instructions = aiResponse.itinerary.instructions.map { $0.instruction }
+            let geometry: [[Double]] = decoded.map { [$0.longitude, $0.latitude] }
+            
+            let pointDepart = PointDTO(
+                latitude: start.latitude,
+                longitude: start.longitude,
+                display_name: departAddressText.isEmpty ? nil : departAddressText,
+                address: departAddressText.isEmpty ? nil : departAddressText
+            )
+            
+            let pointArrivee = PointDTO(
+                latitude: end.latitude,
+                longitude: end.longitude,
+                display_name: arriveeAddressText.isEmpty ? nil : arriveeAddressText,
+                address: arriveeAddressText.isEmpty ? nil : arriveeAddressText
+            )
+            
+            self.itineraire = ItineraireDTO(
+                pointDepart: pointDepart,
+                pointArrivee: pointArrivee,
+                description: "Itinéraire généré par IA - Difficulté: \(aiResponse.personalization.difficultyAssessment)",
+                distance: distanceMeters,
+                duree_estimee: durationSeconds,
+                geometry: geometry,
+                instructions: instructions
+            )
+            
+            self.showAIRecommendations = true
+            
+        } catch AIService.AIServiceError.noToken {
+            showValidationError("Vous devez être connecté pour utiliser l'itinéraire IA.")
+        } catch AIService.AIServiceError.serverError(let message) {
+            showValidationError("Erreur IA: \(message)")
+        } catch {
+            showValidationError("Erreur lors de la génération de l'itinéraire IA.")
+        }
+        
+        isGeneratingAIRoute = false
+    }
+    
+    // MARK: - Polyline decoding (UNIVERSAL)
+    private func decodePolylineUniversal(_ encoded: String) -> [CLLocationCoordinate2D] {
+        // 1) Try precision 1e5 (Google)
+        let p5 = decodePolyline(encoded, precision: 1e5)
+        if p5.count > 1 { return p5 }
+
+        // 2) Try precision 1e6 (ORS)
+        let p6 = decodePolyline(encoded, precision: 1e6)
+        if p6.count > 1 { return p6 }
+
+        // 3) ORS sometimes sends geometry as full coordinates "[[lon,lat],...]" but inside a string
+        if let jsonData = encoded.data(using: .utf8),
+           let arr = try? JSONSerialization.jsonObject(with: jsonData) as? [[Double]],
+           arr.count > 1 {
+            return arr.map { CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0]) }
+        }
+
+        return []
+    }
+
+    private func decodePolyline(_ encoded: String, precision: Double) -> [CLLocationCoordinate2D] {
+        var coords: [CLLocationCoordinate2D] = []
+        var index = encoded.startIndex
+        var lat = 0
+        var lng = 0
+
+        while index < encoded.endIndex {
+            var result = 0, shift = 0, byte = 0
+            repeat {
+                byte = Int(encoded[index].asciiValue! - 63)
+                result |= (byte & 0x1F) << shift
+                shift += 5
+                index = encoded.index(after: index)
+            } while byte >= 0x20 && index < encoded.endIndex
+
+            let deltaLat = ((result & 1) != 0) ? ~(result >> 1) : (result >> 1)
+            lat += deltaLat
+
+            result = 0
+            shift = 0
+
+            guard index < encoded.endIndex else { break }
+
+            repeat {
+                byte = Int(encoded[index].asciiValue! - 63)
+                result |= (byte & 0x1F) << shift
+                shift += 5
+                index = encoded.index(after: index)
+            } while byte >= 0x20 && index < encoded.endIndex
+
+            let deltaLng = ((result & 1) != 0) ? ~(result >> 1) : (result >> 1)
+            lng += deltaLng
+
+            coords.append(CLLocationCoordinate2D(
+                latitude: Double(lat) / precision,
+                longitude: Double(lng) / precision
+            ))
+        }
+
+        return coords
+    }
+
+    private func fixDecodedRoute(_ coords: [CLLocationCoordinate2D],
+                                 start: CLLocationCoordinate2D,
+                                 end: CLLocationCoordinate2D) -> [CLLocationCoordinate2D] {
+
+        var fixed = coords
+
+        // 1) Remove invalid longitude (< -1 or > 40 for Tunisia region)
+        fixed = fixed.filter { $0.longitude > -1 && $0.longitude < 40 }
+
+        if fixed.isEmpty { return [start, end] }
+
+        // 2) Force start/end as the first and last points
+        if let first = fixed.first {
+            let d = distance(first, start)
+            if d > 100 { fixed.insert(start, at: 0) }
+        }
+
+        if let last = fixed.last {
+            let d = distance(last, end)
+            if d > 200 { fixed.append(end) }
+        }
+
+        return fixed
+    }
+
+    private func distance(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
+        CLLocation(latitude: a.latitude, longitude: a.longitude)
+            .distance(from: CLLocation(latitude: b.latitude, longitude: b.longitude))
     }
     
     // MARK: - Création Sortie + Camping + Participation auto créateur (ACCEPTEE)
@@ -562,6 +730,12 @@ final class CreateSortieViewModel: ObservableObject {
         campingParticipants = nil
         campingDateDebut = Date()
         campingDateFin = Date().addingTimeInterval(86400)
+        
+        // Reset AI fields
+        isGeneratingAIRoute = false
+        aiItineraryResponse = nil
+        aiContext = ""
+        showAIRecommendations = false
     }
     
     // MARK: - Helpers erreur
