@@ -2,19 +2,23 @@
 //  HomeView.swift
 //  VIBRA
 //
-//  Created by mac book pro on 11/7/25.
-//
 
 import SwiftUI
+import CoreLocation
 
 struct HomeView: View {
     @StateObject private var viewModel = HomeViewModel()
+    @StateObject private var speechRecognizer = SpeechRecognizer()
+    @StateObject private var locationManager = RideLocationManager()
+    
     @State private var showMatchingView = false
+    @State private var showFiltersSheet = false
+    @State private var showDatePicker = false
+    @State private var showLocationSheet = false
 
     var body: some View {
         NavigationStack {
             ZStack {
-                // 🌌 Arrière-plan cohérent avec l'app
                 LinearGradient(
                     gradient: Gradient(colors: [AppColors.BackgroundGradientStart, AppColors.BackgroundGradientEnd]),
                     startPoint: .topLeading,
@@ -23,19 +27,12 @@ struct HomeView: View {
                 .ignoresSafeArea()
 
                 VStack(spacing: 16) {
-                    // 🔍 Barre de recherche avec effet verre
                     searchBar
-
-                    // 🎯 Bouton Matching (nouveau)
                     matchingButton
-
-                    // 🚴‍♂️ Filtre activité (Randonnée / Vélo)
+                    quickFiltersBar
                     activityFilterBar
-
-                    // 🔘 Boutons principaux (Followers / Recommendation / Explore)
                     mainFilterBar
 
-                    // 📋 Liste des sorties
                     ScrollView {
                         LazyVStack(spacing: 20) {
                             if viewModel.isLoading {
@@ -50,11 +47,8 @@ struct HomeView: View {
                             } else if viewModel.filteredItems.isEmpty {
                                 emptyStateView
                             } else {
-                                Text("✅ \(viewModel.filteredItems.count) sortie(s) trouvée(s)")
-                                    .foregroundColor(AppColors.GreenAccent)
-                                    .font(.caption)
-                                    .padding(.bottom, 5)
-
+                                resultsHeader
+                                
                                 ForEach(viewModel.filteredItems, id: \.ride.id) { item in
                                     NavigationLink(destination: SortieDetailView(ride: item.ride, creator: item.creator)) {
                                         RideCardView(item: item)
@@ -65,7 +59,7 @@ struct HomeView: View {
                             }
                         }
                         .padding(.horizontal)
-                        .padding(.bottom, 90) // espace pour tabbar
+                        .padding(.bottom, 90)
                     }
                 }
                 .padding(.top, 10)
@@ -77,14 +71,179 @@ struct HomeView: View {
                 print("🚀 HomeView: Appearing, about to load data...")
                 await viewModel.load()
                 print("✅ HomeView: Load completed. Items count: \(viewModel.items.count)")
+                locationManager.requestLocation()
+            }
+            .onChange(of: locationManager.location) { oldValue, newValue in
+                if let newValue = newValue {
+                    viewModel.userLocation = CLLocationCoordinate2D(
+                        latitude: newValue.coordinate.latitude,
+                        longitude: newValue.coordinate.longitude
+                    )
+                }
+            }
+            .onChange(of: speechRecognizer.transcript) { oldValue, newValue in
+                viewModel.searchText = newValue
             }
             .sheet(isPresented: $showMatchingView) {
                 MatchingView()
             }
+            .sheet(isPresented: $showFiltersSheet) {
+                FiltersSheetView(viewModel: viewModel)
+            }
+            .sheet(isPresented: $showDatePicker) {
+                DateFilterSheet(viewModel: viewModel)
+            }
+            .sheet(isPresented: $showLocationSheet) {
+                LocationFilterSheet(viewModel: viewModel, locationManager: locationManager)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                hideKeyboard()
+            }
         }
     }
+    
+    private var resultsHeader: some View {
+        HStack {
+            Text("✅ \(viewModel.filteredItems.count) sortie(s) trouvée(s)")
+                .foregroundColor(AppColors.GreenAccent)
+                .font(.caption)
+            
+            Spacer()
+            
+            if viewModel.activeFiltersCount > 0 {
+                Button {
+                    viewModel.resetFilters()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.caption2)
+                        Text("Réinitialiser")
+                            .font(.caption2)
+                    }
+                    .foregroundColor(AppColors.TextSecondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(AppColors.CardGlass)
+                    .cornerRadius(8)
+                }
+            }
+        }
+        .padding(.bottom, 5)
+    }
+    
+    private var quickFiltersBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                Button {
+                    showDatePicker = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: viewModel.selectedDateFilter.icon)
+                            .font(.caption)
+                        Text(viewModel.selectedDateFilter.rawValue)
+                            .font(.caption.weight(.medium))
+                        if viewModel.selectedDateFilter != .all {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.caption2)
+                                .foregroundColor(AppColors.GreenAccent)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        viewModel.selectedDateFilter != .all
+                        ? AnyShapeStyle(LinearGradient(
+                            colors: [AppColors.GreenAccent.opacity(0.3), AppColors.TealAccent.opacity(0.3)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ))
+                        : AnyShapeStyle(AppColors.CardGlass)
+                    )
+                    .foregroundColor(AppColors.TextPrimary)
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(
+                                viewModel.selectedDateFilter != .all
+                                ? AppColors.GreenAccent.opacity(0.5)
+                                : AppColors.DividerColor,
+                                lineWidth: 1
+                            )
+                    )
+                }
+                
+                Button {
+                    showLocationSheet = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "location.fill")
+                            .font(.caption)
+                        Text(viewModel.userLocation != nil ? "À proximité" : "Localisation")
+                            .font(.caption.weight(.medium))
+                        if viewModel.userLocation != nil {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.caption2)
+                                .foregroundColor(AppColors.GreenAccent)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        viewModel.userLocation != nil
+                        ? AnyShapeStyle(LinearGradient(
+                            colors: [AppColors.GreenAccent.opacity(0.3), AppColors.TealAccent.opacity(0.3)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ))
+                        : AnyShapeStyle(AppColors.CardGlass)
+                    )
+                    .foregroundColor(AppColors.TextPrimary)
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(
+                                viewModel.userLocation != nil
+                                ? AppColors.GreenAccent.opacity(0.5)
+                                : AppColors.DividerColor,
+                                lineWidth: 1
+                            )
+                    )
+                }
+                
+                Button {
+                    showFiltersSheet = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "line.3.horizontal.decrease.circle")
+                            .font(.caption)
+                        Text("Plus de filtres")
+                            .font(.caption.weight(.medium))
+                        if viewModel.activeFiltersCount > 0 {
+                            Text("(\(viewModel.activeFiltersCount))")
+                                .font(.caption2.weight(.bold))
+                                .foregroundColor(AppColors.GreenAccent)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(AppColors.CardGlass)
+                    .foregroundColor(AppColors.TextPrimary)
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(AppColors.DividerColor, lineWidth: 1)
+                    )
+                }
+            }
+            .padding(.horizontal)
+        }
+    }
+    
+    private func hideKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
 
-    // MARK: - Search Bar
     private var searchBar: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
@@ -104,8 +263,31 @@ struct HomeView: View {
                 }
             }
 
-            Image(systemName: "mic.fill")
-                .foregroundColor(AppColors.TextSecondary)
+            Button {
+                if speechRecognizer.isRecording {
+                    speechRecognizer.stopRecording()
+                } else {
+                    speechRecognizer.startRecording()
+                }
+            } label: {
+                ZStack {
+                    if speechRecognizer.isRecording {
+                        Circle()
+                            .fill(AppColors.GreenAccent.opacity(0.3))
+                            .frame(width: 32, height: 32)
+                            .scaleEffect(speechRecognizer.isRecording ? 1.2 : 1.0)
+                            .animation(
+                                Animation.easeInOut(duration: 0.8)
+                                    .repeatForever(autoreverses: true),
+                                value: speechRecognizer.isRecording
+                            )
+                    }
+                    
+                    Image(systemName: speechRecognizer.isRecording ? "mic.fill" : "mic.fill")
+                        .foregroundColor(speechRecognizer.isRecording ? AppColors.GreenAccent : AppColors.TextSecondary)
+                        .font(.system(size: 16))
+                }
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -113,13 +295,22 @@ struct HomeView: View {
         .cornerRadius(16)
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .stroke(AppColors.DividerColor, lineWidth: 0.8)
+                .stroke(
+                    speechRecognizer.isRecording
+                    ? AppColors.GreenAccent.opacity(0.8)
+                    : AppColors.DividerColor,
+                    lineWidth: speechRecognizer.isRecording ? 1.5 : 0.8
+                )
         )
-        .shadow(color: AppColors.ShadowColor.opacity(0.8), radius: 8, x: 0, y: 4)
+        .shadow(
+            color: speechRecognizer.isRecording
+            ? AppColors.GlowGreen.opacity(0.5)
+            : AppColors.ShadowColor.opacity(0.8),
+            radius: 8, x: 0, y: 4
+        )
         .padding(.horizontal)
     }
 
-    // MARK: - Matching Button (NEW)
     private var matchingButton: some View {
         Button(action: {
             showMatchingView = true
@@ -179,7 +370,6 @@ struct HomeView: View {
         .padding(.horizontal)
     }
 
-    // MARK: - Activity Filter (All / Randonnée / Vélo)
     private var activityFilterBar: some View {
         HStack(spacing: 10) {
             ActivityFilterButton(
@@ -208,7 +398,6 @@ struct HomeView: View {
         .padding(.horizontal)
     }
 
-    // MARK: - Main Filter Bar (Followers / Recommendation / Explore)
     private var mainFilterBar: some View {
         HStack(spacing: 10) {
             FilterButton(
@@ -244,7 +433,6 @@ struct HomeView: View {
         .padding(.horizontal)
     }
 
-    // MARK: - Error State
     @ViewBuilder
     private func errorStateView(error: String) -> some View {
         VStack(spacing: 10) {
@@ -280,7 +468,6 @@ struct HomeView: View {
         .padding(.top, 40)
     }
 
-    // MARK: - Empty State
     private var emptyStateView: some View {
         VStack(spacing: 10) {
             Image(systemName: viewModel.selectedTab == "Recommendation" ? "star.fill" : "tray.fill")
@@ -307,8 +494,6 @@ struct HomeView: View {
         .padding(.top, 40)
     }
 }
-
-// MARK: - Boutons filtres
 
 struct FilterButton: View {
     var title: String
@@ -387,7 +572,6 @@ struct ActivityFilterButton: View {
     }
 }
 
-// MARK: - Preview
 struct HomeView_Previews: PreviewProvider {
     static var previews: some View {
         TabBarView()

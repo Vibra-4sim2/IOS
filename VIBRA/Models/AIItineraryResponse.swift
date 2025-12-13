@@ -29,11 +29,12 @@ struct AIItineraryResponse: Codable {
 
 struct AIItinerary: Codable {
     let summary: AIItinerarySummary
-    let geometry: String // Polyline encodée
-    let bbox: [Double]
-    let segments: [AISegment]
-    let waypoints: [AIWaypoint]
+    let geometry: AIGeometry
     let instructions: [AIInstruction]
+}
+
+struct AIGeometry: Codable {
+    let coordinates: [[Double]] // Array of [lon, lat, elevation]
 }
 
 struct AIItinerarySummary: Codable {
@@ -41,35 +42,6 @@ struct AIItinerarySummary: Codable {
     let duration: Double // minutes
     let ascent: Double
     let descent: Double
-}
-
-struct AISegment: Codable {
-    let distance: Double
-    let duration: Double
-    let steps: [AIStep]
-    let ascent: Double?
-    let descent: Double?
-}
-
-struct AIStep: Codable {
-    let distance: Double
-    let duration: Double
-    let type: Int
-    let instruction: String
-    let name: String
-    let wayPoints: [Int]
-    let exitNumber: Int?
-
-    enum CodingKeys: String, CodingKey {
-        case distance, duration, type, instruction, name
-        case wayPoints = "way_points"
-        case exitNumber = "exit_number"
-    }
-}
-
-struct AIWaypoint: Codable {
-    let location: [Double] // [lon, lat]
-    let name: String
 }
 
 struct AIInstruction: Codable {

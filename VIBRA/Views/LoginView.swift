@@ -207,6 +207,15 @@ struct LoginView: View {
             Text(viewModel.errorMessage ?? "Unknown error")
         }
         .preferredColorScheme(.dark)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            hideKeyboard()
+        }
+    }
+    
+    // MARK: - Helpers
+    private func hideKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
     
     // MARK: - Custom Field

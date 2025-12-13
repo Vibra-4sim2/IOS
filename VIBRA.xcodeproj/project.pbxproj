@@ -268,7 +268,8 @@
 				INFOPLIST_FILE = VIBRA/Info.plist;
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Cette application utilise votre position pour afficher la carte";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "VIBRA a besoin d'accéder au microphone pour la recherche vocale.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "VIBRA souhaite utiliser la reconnaissance vocale pour faciliter vos recherches.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -304,7 +305,8 @@
 				INFOPLIST_FILE = VIBRA/Info.plist;
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Cette application utilise votre position pour afficher la carte";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "VIBRA a besoin d'accéder au microphone pour la recherche vocale.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "VIBRA souhaite utiliser la reconnaissance vocale pour faciliter vos recherches.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

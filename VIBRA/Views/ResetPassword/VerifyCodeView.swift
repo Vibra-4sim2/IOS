@@ -74,7 +74,16 @@ struct VerifyCodeView: View {
             }
             .padding(.horizontal, 30)
             .frame(maxWidth: 400)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                hideKeyboard()
+            }
         }
+    }
+    
+    // MARK: - Helpers
+    private func hideKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 }
 #Preview {

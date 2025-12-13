@@ -3,6 +3,7 @@
 
 import Foundation
 import Combine
+import CoreLocation
 
 @MainActor
 final class HomeViewModel: ObservableObject {
@@ -10,40 +11,60 @@ final class HomeViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
 
-    // 🔍 Recherche et filtres
     @Published var searchText: String = ""
-    @Published var selectedTab: String = "Explore"        // "Followers", "Recommendation", "Explore"
-    @Published var selectedActivity: String = "All"       // "All", "Randonnée", "Vélo"
-
-    // 🆕 ID de l'utilisateur connecté
+    @Published var selectedTab: String = "Explore"
+    @Published var selectedActivity: String = "All"
+    
+    @Published var selectedDateFilter: DateFilter = .all
+    @Published var selectedLocation: String = ""
+    @Published var searchRadius: Double = 50
+    @Published var userLocation: CLLocationCoordinate2D?
+    
+    @Published var isRecording = false
+    
     private var currentUserId: String? {
-        // D'abord essayer UserDefaults (plus rapide)
         if let userId = JWTHelper.getUserIdFromUserDefaults() {
             return userId
         }
-        // Sinon, décoder depuis le JWT
         return JWTHelper.getUserIdFromToken()
     }
+    
+    enum DateFilter: String, CaseIterable {
+        case all = "Toutes"
+        case today = "Aujourd'hui"
+        case thisWeek = "Cette semaine"
+        case thisMonth = "Ce mois"
+        case upcoming = "À venir"
+        
+        var icon: String {
+            switch self {
+            case .all: return "calendar"
+            case .today: return "calendar.badge.clock"
+            case .thisWeek: return "calendar.badge.plus"
+            case .thisMonth: return "calendar.circle"
+            case .upcoming: return "arrow.right.circle"
+            }
+        }
+    }
 
-    // 🔎 Liste filtrée utilisée par la vue
     var filteredItems: [RideWithCreator] {
         var result = items
 
-        // 1) Filtre par activité (type de sortie)
         switch selectedActivity {
         case "Randonnée":
             result = result.filter { $0.ride.type?.uppercased().contains("RANDON") == true || $0.ride.type?.uppercased().contains("HIKE") == true }
         case "Vélo":
-            result = result.filter { $0.ride.type?.uppercased().contains("VELO") == true || $0.ride.type?.uppercased().contains("CYCLE") == true }
+            result = result.filter { $0.ride.type?.uppercased().contains("VELO") == true || $0.ride.type?.uppercased().contains("CYCLE") == true || $0.ride.type?.uppercased().contains("BIKE") == true }
         default:
             break
         }
 
-        // 2) Note: Le filtre par onglet (Followers / Recommendation / Explore)
-        // est maintenant géré au niveau du chargement des données
-        // On ne filtre plus ici, car les données sont déjà filtrées par la source
+        result = filterByDate(result)
+        
+        if !selectedLocation.isEmpty || userLocation != nil {
+            result = filterByLocation(result)
+        }
 
-        // 3) Filtre par texte (titre, description, nom de créateur)
         let text = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         if !text.isEmpty {
             let lower = text.lowercased()
@@ -51,14 +72,87 @@ final class HomeViewModel: ObservableObject {
                 let title = item.ride.titre.lowercased()
                 let desc = item.ride.description?.lowercased() ?? ""
                 let creatorName = "\(item.creator?.firstName ?? "") \(item.creator?.lastName ?? "")".lowercased()
-                return title.contains(lower) || desc.contains(lower) || creatorName.contains(lower)
+                let type = item.ride.type?.lowercased() ?? ""
+                return title.contains(lower) || desc.contains(lower) || creatorName.contains(lower) || type.contains(lower)
             }
         }
 
         return result
     }
+    
+    private func filterByDate(_ items: [RideWithCreator]) -> [RideWithCreator] {
+        guard selectedDateFilter != .all else { return items }
+        
+        let calendar = Calendar.current
+        let now = Date()
+        
+        return items.filter { item in
+            guard let dateString = item.ride.date,
+                  let rideDate = parseDate(dateString) else {
+                return false
+            }
+            
+            switch selectedDateFilter {
+            case .all:
+                return true
+            case .today:
+                return calendar.isDateInToday(rideDate)
+            case .thisWeek:
+                guard let weekStart = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: now)),
+                      let weekEnd = calendar.date(byAdding: .day, value: 7, to: weekStart) else {
+                    return false
+                }
+                return rideDate >= weekStart && rideDate < weekEnd
+            case .thisMonth:
+                return calendar.isDate(rideDate, equalTo: now, toGranularity: .month)
+            case .upcoming:
+                return rideDate >= now
+            }
+        }
+    }
+    
+    private func filterByLocation(_ items: [RideWithCreator]) -> [RideWithCreator] {
+        guard let userLoc = userLocation else { return items }
+        
+        return items.filter { item in
+            guard let startPoint = item.ride.pointDepart else { return true }
+            
+            let rideLocation = CLLocation(
+                latitude: startPoint.latitude,
+                longitude: startPoint.longitude
+            )
+            let userCLLocation = CLLocation(
+                latitude: userLoc.latitude,
+                longitude: userLoc.longitude
+            )
+            
+            let distance = userCLLocation.distance(from: rideLocation) / 1000
+            return distance <= searchRadius
+        }
+    }
+    
+    private func parseDate(_ dateString: String) -> Date? {
+        let formatters = [
+            "yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+            "yyyy-MM-dd'T'HH:mm:ssZ",
+            "yyyy-MM-dd'T'HH:mm:ss",
+            "yyyy-MM-dd",
+            "dd/MM/yyyy"
+        ]
+        
+        for format in formatters {
+            let formatter = DateFormatter()
+            formatter.dateFormat = format
+            formatter.locale = Locale(identifier: "fr_FR")
+            formatter.timeZone = TimeZone.current
+            if let date = formatter.date(from: dateString) {
+                return date
+            }
+        }
+        
+        return nil
+    }
 
-    // 🔄 Fonction principale de chargement (appelée quand l'onglet change)
     func load() async {
         switch selectedTab {
         case "Followers":
@@ -72,9 +166,8 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
-    // 📋 Charger toutes les sorties (Explore)
     private func loadAllRides() async {
-        print("🔄 HomeViewModel: Loading all rides (Explore)...")
+        print("📄 HomeViewModel: Loading all rides (Explore)...")
         isLoading = true
         errorMessage = nil
         do {
@@ -89,7 +182,6 @@ final class HomeViewModel: ObservableObject {
         isLoading = false
     }
 
-    // ⭐ Charger les sorties recommandées
     private func loadRecommendedRides() async {
         print("⭐ HomeViewModel: Loading recommended rides...")
         
@@ -118,17 +210,29 @@ final class HomeViewModel: ObservableObject {
         isLoading = false
     }
 
-    // 👥 Charger les sorties des personnes suivies
     private func loadFollowersRides() async {
         print("👥 HomeViewModel: Loading followers rides...")
-        // TODO: Implémenter la logique pour charger les sorties des personnes suivies
-        // Pour l'instant, on charge toutes les sorties
-        // Vous devrez créer une route API dédiée pour cela
         await loadAllRides()
     }
 
-    // 🔄 Recharger les données quand l'onglet change
     func onTabChange() async {
         await load()
+    }
+    
+    func resetFilters() {
+        searchText = ""
+        selectedActivity = "All"
+        selectedDateFilter = .all
+        selectedLocation = ""
+        searchRadius = 50
+    }
+    
+    var activeFiltersCount: Int {
+        var count = 0
+        if !searchText.isEmpty { count += 1 }
+        if selectedActivity != "All" { count += 1 }
+        if selectedDateFilter != .all { count += 1 }
+        if !selectedLocation.isEmpty || userLocation != nil { count += 1 }
+        return count
     }
 }

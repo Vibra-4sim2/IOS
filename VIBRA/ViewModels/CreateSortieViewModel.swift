@@ -76,6 +76,7 @@ final class CreateSortieViewModel: ObservableObject {
     @Published var aiItineraryResponse: AIItineraryResponse? = nil
     @Published var aiContext: String = ""
     @Published var showAIRecommendations: Bool = false
+    @Published var showInstructionsSheet: Bool = false
     
     private let service: SortieService
     private let locationManager = CLLocationManager()
@@ -340,17 +341,18 @@ final class CreateSortieViewModel: ObservableObject {
             
             self.aiItineraryResponse = aiResponse
             
-            // Décoder la polyline IA avec fallback de précision pour fiabilité du tracé
-            var decoded = decodePolylineUniversal(aiResponse.itinerary.geometry)
-            decoded = fixDecodedRoute(decoded, start: start, end: end)
-            self.routeCoordinates = decoded
+            // Convertir les coordonnées geometry en CLLocationCoordinate2D
+            let coordinates = aiResponse.itinerary.geometry.coordinates.map {
+                CLLocationCoordinate2D(latitude: $0[1], longitude: $0[0])
+            }
+            self.routeCoordinates = coordinates
             
-            // Construire l'ItineraireDTO cohérent avec les coordonnées décodées
+            // Construire l'ItineraireDTO cohérent avec les coordonnées
             let summary = aiResponse.itinerary.summary
             let distanceMeters = summary.distance * 1000
             let durationSeconds = summary.duration * 60
             let instructions = aiResponse.itinerary.instructions.map { $0.instruction }
-            let geometry: [[Double]] = decoded.map { [$0.longitude, $0.latitude] }
+            let geometry: [[Double]] = coordinates.map { [$0.longitude, $0.latitude] }
             
             let pointDepart = PointDTO(
                 latitude: start.latitude,
@@ -736,6 +738,7 @@ final class CreateSortieViewModel: ObservableObject {
         aiItineraryResponse = nil
         aiContext = ""
         showAIRecommendations = false
+        showInstructionsSheet = false
     }
     
     // MARK: - Helpers erreur

@@ -1,5 +1,5 @@
 //
-//  CreateSortieView.swift (Partie 1/2)
+//  CreateSortieView.swift
 //  VIBRA
 //
 
@@ -67,6 +67,11 @@ struct CreateSortieView: View {
             })
             .onAppear {
                 viewModel.requestLocationPermission()
+            }
+            // Fermer le clavier en tapant à l'extérieur
+            .contentShape(Rectangle())
+            .onTapGesture {
+                hideKeyboard()
             }
         }
     }
@@ -211,6 +216,7 @@ struct CreateSortieView: View {
             }
             .padding()
         }
+        .scrollDismissesKeyboard(.immediately)
     }
 
     // MARK: - Step 2: Itinéraire (standard + IA)
@@ -372,25 +378,58 @@ struct CreateSortieView: View {
                                 .modifier(VibraFieldModifier())
                         }
 
-                        // Infos itinéraire
+                        // Infos itinéraire + bouton détails
                         if let itin = viewModel.itineraire {
-                            HStack(spacing: 16) {
-                                if let distance = itin.distance {
-                                    let distanceKm = distance / 1000
-                                    let distanceText = String(format: "%.1f km", distanceKm)
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack(spacing: 16) {
+                                    if let distance = itin.distance {
+                                        let distanceKm = distance / 1000
+                                        let distanceText = String(format: "%.1f km", distanceKm)
 
-                                    infoPill(
-                                        title: "Distance",
-                                        value: distanceText,
-                                        icon: "ruler"
-                                    )
+                                        infoPill(
+                                            title: "Distance",
+                                            value: distanceText,
+                                            icon: "ruler"
+                                        )
+                                    }
+                                    if let duree = itin.duree_estimee {
+                                        let minutes = Int(duree / 60)
+                                        infoPill(
+                                            title: "Durée estimée",
+                                            value: "\(minutes) min",
+                                            icon: "clock"
+                                        )
+                                    }
+
+                                    Spacer()
+
+                                    if let instructions = itin.instructions, !instructions.isEmpty {
+                                        Button {
+                                            viewModel.showInstructionsSheet = true
+                                        } label: {
+                                            HStack(spacing: 6) {
+                                                Image(systemName: "list.bullet.rectangle")
+                                                Text("Détails")
+                                            }
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundColor(.black)
+                                            .padding(.vertical, 10)
+                                            .padding(.horizontal, 12)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                                    .fill(AppColors.GreenAccent)
+                                            )
+                                        }
+                                    }
                                 }
-                                if let duree = itin.duree_estimee {
-                                    let minutes = Int(duree / 60)
-                                    infoPill(
-                                        title: "Durée estimée",
-                                        value: "\(minutes) min",
-                                        icon: "clock"
+
+                                // Sheet for instructions detail
+                                .sheet(isPresented: $viewModel.showInstructionsSheet) {
+                                    InstructionsDetailSheet(
+                                        instructions: itin.instructions ?? [],
+                                        onDismiss: {
+                                            viewModel.showInstructionsSheet = false
+                                        }
                                     )
                                 }
                             }
@@ -405,6 +444,7 @@ struct CreateSortieView: View {
             }
             .padding()
         }
+        .scrollDismissesKeyboard(.immediately)
     }
 
     // MARK: - Step 3: Camping (inchangé)
@@ -454,6 +494,7 @@ struct CreateSortieView: View {
             }
             .padding()
         }
+        .scrollDismissesKeyboard(.immediately)
     }
 }
 
@@ -731,7 +772,6 @@ extension CreateSortieView {
                             .foregroundColor(AppColors.TextSecondary)
                     }
 
-                    // simple wrap using LazyVGrid
                     let columns = [GridItem(.adaptive(minimum: 120), spacing: 8)]
                     LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
                         ForEach(aiResponse.aiRecommendations.equipmentSuggestions, id: \.self) { item in
@@ -1067,11 +1107,171 @@ struct ImprovedMapView: UIViewRepresentable {
     }
 }
 
+// MARK: - Instructions Detail Sheet
+
+struct InstructionsDetailSheet: View {
+    let instructions: [String]
+    let onDismiss: () -> Void
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        AppColors.BackgroundGradientStart,
+                        AppColors.BackgroundGradientEnd
+                    ]),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: 16) {
+                        // En-tête
+                        VStack(spacing: 8) {
+                            Image(systemName: "map.fill")
+                                .font(.system(size: 40))
+                                .foregroundColor(AppColors.GreenAccent)
+                            
+                            Text("Instructions de l'itinéraire")
+                                .font(.system(size: 22, weight: .bold))
+                                .foregroundColor(AppColors.TextPrimary)
+                            
+                            Text("\(instructions.count) étape(s)")
+                                .font(.system(size: 14))
+                                .foregroundColor(AppColors.TextSecondary)
+                        }
+                        .padding(.top, 20)
+                        .padding(.bottom, 10)
+                        
+                        // Liste des instructions
+                        ForEach(Array(instructions.enumerated()), id: \.offset) { index, instruction in
+                            InstructionRowView(instruction: instruction, stepNumber: index + 1, isLast: index == instructions.count - 1)
+                        }
+                    }
+                    .padding()
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        onDismiss()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(AppColors.TextSecondary)
+                    }
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+}
+
+// MARK: - Instruction Row View
+
+struct InstructionRowView: View {
+    let instruction: String
+    let stepNumber: Int
+    let isLast: Bool
+    
+    private var iconName: String {
+        let lower = instruction.lowercased()
+        if lower.contains("arrivé") || lower.contains("arrive") || lower.contains("destination") {
+            return "flag.checkered"
+        } else if lower.contains("head") || lower.contains("départ") || stepNumber == 1 {
+            return "location.fill"
+        } else if lower.contains("sharp right") || lower.contains("droite") && lower.contains("sharp") {
+            return "arrow.turn.up.right"
+        } else if lower.contains("sharp left") || lower.contains("gauche") && lower.contains("sharp") {
+            return "arrow.turn.up.left"
+        } else if lower.contains("right") || lower.contains("droite") {
+            return "arrow.turn.up.right"
+        } else if lower.contains("left") || lower.contains("gauche") {
+            return "arrow.turn.up.left"
+        } else if lower.contains("roundabout") || lower.contains("rond-point") {
+            return "arrow.triangle.turn.up.right.circle"
+        } else if lower.contains("continue") || lower.contains("continuer") || lower.contains("straight") {
+            return "arrow.up"
+        } else if lower.contains("keep") {
+            return "arrow.up.right"
+        } else {
+            return "arrow.forward"
+        }
+    }
+    
+    private var iconColor: Color {
+        let lower = instruction.lowercased()
+        if lower.contains("arrivé") || lower.contains("arrive") || lower.contains("destination") || isLast {
+            return AppColors.TealAccent
+        } else if stepNumber == 1 || lower.contains("head") || lower.contains("départ") {
+            return AppColors.GreenAccent
+        } else {
+            return AppColors.TextPrimary
+        }
+    }
+    
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            // Numéro d'étape avec icône
+            VStack(spacing: 4) {
+                ZStack {
+                    Circle()
+                        .fill(iconColor.opacity(0.2))
+                        .frame(width: 40, height: 40)
+                    
+                    Image(systemName: iconName)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(iconColor)
+                }
+                
+                Text("\(stepNumber)")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(AppColors.TextTertiary)
+            }
+            
+            VStack(alignment: .leading, spacing: 6) {
+                // Instruction principale (nettoyée des balises HTML)
+                Text(cleanHTMLTags(from: instruction))
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(AppColors.TextPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            
+            Spacer()
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(AppColors.CardDark.opacity(0.8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(isLast ? AppColors.TealAccent.opacity(0.5) : AppColors.BorderColor, lineWidth: isLast ? 1.5 : 0.7)
+                )
+        )
+        .shadow(color: AppColors.ShadowColor.opacity(0.2), radius: 4, x: 0, y: 2)
+    }
+    
+    private func cleanHTMLTags(from text: String) -> String {
+        return text.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression, range: nil)
+    }
+}
+
 // MARK: - Preview
 
 struct CreateSortieView_Previews: PreviewProvider {
     static var previews: some View {
         CreateSortieView()
             .preferredColorScheme(.dark)
+    }
+}
+
+// MARK: - Helpers pour masquer le clavier
+
+extension View {
+    func hideKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 }
