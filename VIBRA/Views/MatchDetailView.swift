@@ -10,7 +10,7 @@ import SwiftUI
 struct MatchDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let match: UserMatch
-    
+
     var body: some View {
         ZStack {
             // Background gradient
@@ -20,7 +20,7 @@ struct MatchDetailView: View {
                 endPoint: .bottomTrailing
             )
             .ignoresSafeArea()
-            
+
             ScrollView {
                 VStack(spacing: 24) {
                     // Header with close button
@@ -38,16 +38,16 @@ struct MatchDetailView: View {
                         }
                     }
                     .padding(.horizontal)
-                    
+
                     // Profile Section
                     profileSection
-                    
+
                     // Match Score
                     matchScoreSection
-                    
+
                     // Preferences Comparison
                     preferencesSection
-                    
+
                     // Action Buttons
                     actionButtons
                 }
@@ -55,7 +55,7 @@ struct MatchDetailView: View {
             }
         }
     }
-    
+
     // MARK: - Profile Section
     private var profileSection: some View {
         VStack(spacing: 16) {
@@ -96,12 +96,12 @@ struct MatchDetailView: View {
                     )
             )
             .shadow(color: AppColors.GlowGreen, radius: 20)
-            
+
             // Name
             Text(match.user.fullName)
                 .font(.system(size: 28, weight: .bold))
                 .foregroundColor(AppColors.TextPrimary)
-            
+
             // Gender badge
             HStack(spacing: 8) {
                 Image(systemName: match.user.gender.lowercased() == "male" ? "person.fill" : "person.fill")
@@ -118,7 +118,7 @@ struct MatchDetailView: View {
             )
         }
     }
-    
+
     // MARK: - Match Score Section
     private var matchScoreSection: some View {
         VStack(spacing: 16) {
@@ -126,7 +126,7 @@ struct MatchDetailView: View {
             ZStack {
                 Circle()
                     .stroke(AppColors.CardDark, lineWidth: 12)
-                
+
                 Circle()
                     .trim(from: 0, to: match.similarity)
                     .stroke(
@@ -138,19 +138,19 @@ struct MatchDetailView: View {
                         style: StrokeStyle(lineWidth: 12, lineCap: .round)
                     )
                     .rotationEffect(.degrees(-90))
-                
+
                 VStack(spacing: 4) {
                     Text(match.similarityPercent)
                         .font(.system(size: 36, weight: .bold))
                         .foregroundColor(AppColors.GreenAccent)
-                    
+
                     Text("Compatibilité")
                         .font(.system(size: 12))
                         .foregroundColor(AppColors.TextSecondary)
                 }
             }
             .frame(width: 150, height: 150)
-            
+
             Text("Algorithme: \(match.distance < 5 ? "Très proche" : "Compatible")")
                 .font(.system(size: 14))
                 .foregroundColor(AppColors.TextTertiary)
@@ -168,7 +168,7 @@ struct MatchDetailView: View {
         )
         .padding(.horizontal)
     }
-    
+
     // MARK: - Preferences Section
     private var preferencesSection: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -176,16 +176,16 @@ struct MatchDetailView: View {
                 .font(.system(size: 20, weight: .bold))
                 .foregroundColor(AppColors.TextPrimary)
                 .padding(.horizontal)
-            
+
             VStack(spacing: 12) {
                 if let level = match.matchedPreferences.level {
                     PreferenceRow(title: "Niveau", value: level.safeValue, isMatch: level.safeMatch)
                 }
-                
+
                 if let cyclingType = match.matchedPreferences.cyclingType {
                     PreferenceRow(title: "Type de vélo", value: cyclingType.safeValue, isMatch: cyclingType.safeMatch)
                 }
-                
+
                 if let cyclingFreq = match.matchedPreferences.cyclingFrequency {
                     PreferenceRow(
                         title: "Fréquence vélo",
@@ -194,7 +194,7 @@ struct MatchDetailView: View {
                         subtitle: cyclingFreq.comparisonText
                     )
                 }
-                
+
                 if let hikeType = match.matchedPreferences.hikeType {
                     PreferenceRow(
                         title: "Type de randonnée",
@@ -203,7 +203,7 @@ struct MatchDetailView: View {
                         subtitle: hikeType.comparisonText
                     )
                 }
-                
+
                 if let hikeDuration = match.matchedPreferences.hikeDuration {
                     PreferenceRow(
                         title: "Durée randonnée",
@@ -212,15 +212,15 @@ struct MatchDetailView: View {
                         subtitle: hikeDuration.comparisonText
                     )
                 }
-                
+
                 if let hikePreference = match.matchedPreferences.hikePreference {
                     PreferenceRow(title: "Préférence rando", value: hikePreference.safeValue, isMatch: hikePreference.safeMatch)
                 }
-                
+
                 if let camping = match.matchedPreferences.campingPractice {
                     PreferenceRow(title: "Pratique camping", value: camping.safeValue ? "Oui" : "Non", isMatch: camping.safeMatch)
                 }
-                
+
                 if let campingType = match.matchedPreferences.campingType {
                     PreferenceRow(
                         title: "Type de camping",
@@ -243,12 +243,13 @@ struct MatchDetailView: View {
             .padding(.horizontal)
         }
     }
-    
+
+    // ...
     // MARK: - Action Buttons
     private var actionButtons: some View {
         VStack(spacing: 12) {
             // Message button
-            Button(action: {
+            /*Button(action: {
                 // TODO: Implement messaging
             }) {
                 HStack {
@@ -271,12 +272,10 @@ struct MatchDetailView: View {
                         )
                         .shadow(color: AppColors.GlowGreen, radius: 10)
                 )
-            }
-            
-            // View profile button
-            Button(action: {
-                // TODO: Implement profile view
-            }) {
+            }*/
+
+            // View profile button -> ouvre la page de profil standard avec l'userId du match
+            NavigationLink(destination: ProfileView(userId: match.userId)) {
                 HStack {
                     Image(systemName: "person.circle")
                         .font(.system(size: 16))
@@ -298,50 +297,50 @@ struct MatchDetailView: View {
         }
         .padding(.horizontal)
     }
-}
+    // ...
+    // MARK: - Preference Row
+    struct PreferenceRow: View {
+        let title: String
+        let value: String
+        let isMatch: Bool
+        var subtitle: String?
 
-// MARK: - Preference Row
-struct PreferenceRow: View {
-    let title: String
-    let value: String
-    let isMatch: Bool
-    var subtitle: String?
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(AppColors.TextSecondary)
-                    
-                    Text(value)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(AppColors.TextPrimary)
-                    
-                    if let subtitle = subtitle {
-                        Text(subtitle)
-                            .font(.system(size: 12))
-                            .foregroundColor(AppColors.TextTertiary)
+        var body: some View {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(title)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(AppColors.TextSecondary)
+
+                        Text(value)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(AppColors.TextPrimary)
+
+                        if let subtitle = subtitle {
+                            Text(subtitle)
+                                .font(.system(size: 12))
+                                .foregroundColor(AppColors.TextTertiary)
+                        }
+                    }
+
+                    Spacer()
+
+                    ZStack {
+                        Circle()
+                            .fill(isMatch ? AppColors.SuccessGreen.opacity(0.2) : AppColors.CardOverlay)
+                            .frame(width: 36, height: 36)
+
+                        Image(systemName: isMatch ? "checkmark" : "xmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(isMatch ? AppColors.SuccessGreen : AppColors.TextTertiary)
                     }
                 }
-                
-                Spacer()
-                
-                ZStack {
-                    Circle()
-                        .fill(isMatch ? AppColors.SuccessGreen.opacity(0.2) : AppColors.CardOverlay)
-                        .frame(width: 36, height: 36)
-                    
-                    Image(systemName: isMatch ? "checkmark" : "xmark")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(isMatch ? AppColors.SuccessGreen : AppColors.TextTertiary)
+
+                if !isMatch {
+                    Divider()
+                        .background(AppColors.DividerColor)
                 }
-            }
-            
-            if !isMatch {
-                Divider()
-                    .background(AppColors.DividerColor)
             }
         }
     }

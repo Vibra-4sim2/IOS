@@ -66,8 +66,11 @@ struct MatchingView: View {
         .onDisappear {
             viewModel.cancelLoading()
         }
+        // IMPORTANT: NavigationStack around the sheet so NavigationLink inside MatchDetailView can push ProfileView
         .sheet(item: $selectedMatch) { match in
-            MatchDetailView(match: match)
+            NavigationStack {
+                MatchDetailView(match: match)
+            }
         }
     }
     
