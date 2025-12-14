@@ -1,26 +1,27 @@
-// HomeViewModel.swift
+// MapViewModel.swift
 // VIBRA
 
 import Foundation
 import Combine
 import CoreLocation
+import MapKit
 
 @MainActor
-final class HomeViewModel: ObservableObject {
+final class MapViewModel: ObservableObject {
     @Published var items: [RideWithCreator] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
-
+    @Published var selectedRide: RideWithCreator?
+    
     @Published var searchText: String = ""
     @Published var selectedTab: String = "Explore"
     @Published var selectedActivity: String = "All"
-    
     @Published var selectedDateFilter: DateFilter = .all
-    @Published var selectedLocation: String = ""
-    @Published var searchRadius: Double = 50
-    @Published var userLocation: CLLocationCoordinate2D?
     
-    @Published var isRecording = false
+    @Published var mapRegion = MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 36.8065, longitude: 10.1815),
+        span: MKCoordinateSpan(latitudeDelta: 0.5, longitudeDelta: 0.5)
+    )
     
     private var currentUserId: String? {
         if let userId = JWTHelper.getUserIdFromUserDefaults() {
@@ -46,10 +47,10 @@ final class HomeViewModel: ObservableObject {
             }
         }
     }
-
+    
     var filteredItems: [RideWithCreator] {
         var result = items
-
+        
         switch selectedActivity {
         case "Randonnée":
             result = result.filter { $0.ride.type?.uppercased().contains("RANDON") == true || $0.ride.type?.uppercased().contains("HIKE") == true }
@@ -58,13 +59,9 @@ final class HomeViewModel: ObservableObject {
         default:
             break
         }
-
+        
         result = filterByDate(result)
         
-        if !selectedLocation.isEmpty || userLocation != nil {
-            result = filterByLocation(result)
-        }
-
         let text = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         if !text.isEmpty {
             let lower = text.lowercased()
@@ -76,8 +73,25 @@ final class HomeViewModel: ObservableObject {
                 return title.contains(lower) || desc.contains(lower) || creatorName.contains(lower) || type.contains(lower)
             }
         }
-
-        return result
+        
+        return result.filter { $0.ride.pointDepart != nil }
+    }
+    
+    var mapAnnotations: [RideAnnotation] {
+        filteredItems.compactMap { item in
+            guard let point = item.ride.pointDepart else { return nil }
+            return RideAnnotation(
+                id: item.ride.id ?? UUID().uuidString,
+                coordinate: CLLocationCoordinate2D(
+                    latitude: point.latitude,
+                    longitude: point.longitude
+                ),
+                title: item.ride.titre,
+                date: item.ride.date,
+                type: item.ride.type,
+                rideWithCreator: item
+            )
+        }
     }
     
     private func filterByDate(_ items: [RideWithCreator]) -> [RideWithCreator] {
@@ -111,26 +125,6 @@ final class HomeViewModel: ObservableObject {
         }
     }
     
-    private func filterByLocation(_ items: [RideWithCreator]) -> [RideWithCreator] {
-        guard let userLoc = userLocation else { return items }
-        
-        return items.filter { item in
-            guard let startPoint = item.ride.pointDepart else { return true }
-            
-            let rideLocation = CLLocation(
-                latitude: startPoint.latitude,
-                longitude: startPoint.longitude
-            )
-            let userCLLocation = CLLocation(
-                latitude: userLoc.latitude,
-                longitude: userLoc.longitude
-            )
-            
-            let distance = userCLLocation.distance(from: rideLocation) / 1000
-            return distance <= searchRadius
-        }
-    }
-    
     private func parseDate(_ dateString: String) -> Date? {
         let formatters = [
             "yyyy-MM-dd'T'HH:mm:ss.SSSZ",
@@ -152,7 +146,7 @@ final class HomeViewModel: ObservableObject {
         
         return nil
     }
-
+    
     func load() async {
         switch selectedTab {
         case "Followers":
@@ -165,29 +159,30 @@ final class HomeViewModel: ObservableObject {
             await loadAllRides()
         }
     }
-
+    
     private func loadAllRides() async {
-        print("📄 HomeViewModel: Loading all rides (Explore)...")
+        print("📄 MapViewModel: Loading all rides...")
         isLoading = true
         errorMessage = nil
         do {
             let fetched = try await HomeService.shared.fetchRidesWithCreators()
-            print("✅ HomeViewModel: Successfully fetched \(fetched.count) rides")
+            print("✅ MapViewModel: Successfully fetched \(fetched.count) rides")
             self.items = fetched
+            updateMapRegion()
         } catch {
-            print("❌ HomeViewModel: Error loading rides - \(error)")
+            print("❌ MapViewModel: Error loading rides - \(error)")
             self.errorMessage = "Erreur de chargement: \(error.localizedDescription)"
             self.items = []
         }
         isLoading = false
     }
-
+    
     private func loadRecommendedRides() async {
-        print("⭐ HomeViewModel: Loading recommended rides...")
+        print("⭐ MapViewModel: Loading recommended rides...")
         
         guard let userId = currentUserId else {
-            print("⚠️ HomeViewModel: No user ID found, cannot load recommendations")
-            self.errorMessage = "Connectez-vous pour voir vos recommandations personnalisées"
+            print("⚠️ MapViewModel: No user ID found")
+            self.errorMessage = "Connectez-vous pour voir vos recommandations"
             self.items = []
             return
         }
@@ -196,25 +191,26 @@ final class HomeViewModel: ObservableObject {
         errorMessage = nil
         do {
             let fetched = try await HomeService.shared.fetchRecommendedRidesWithCreators(userId: userId)
-            print("✅ HomeViewModel: Successfully fetched \(fetched.count) recommended rides")
+            print("✅ MapViewModel: Successfully fetched \(fetched.count) recommended rides")
             self.items = fetched
+            updateMapRegion()
         } catch APIError.invalidResponse(401) {
-            print("❌ HomeViewModel: Authentication error (401)")
-            self.errorMessage = "Session expirée. Veuillez vous reconnecter."
+            print("❌ MapViewModel: Authentication error")
+            self.errorMessage = "Session expirée"
             self.items = []
         } catch {
-            print("❌ HomeViewModel: Error loading recommended rides - \(error)")
-            self.errorMessage = "Erreur de chargement des recommandations: \(error.localizedDescription)"
+            print("❌ MapViewModel: Error loading recommended rides - \(error)")
+            self.errorMessage = "Erreur de chargement: \(error.localizedDescription)"
             self.items = []
         }
         isLoading = false
     }
-
+    
     private func loadFollowersRides() async {
-        print("👥 HomeViewModel: Loading followers rides...")
+        print("👥 MapViewModel: Loading followers rides...")
         await loadAllRides()
     }
-
+    
     func onTabChange() async {
         await load()
     }
@@ -223,8 +219,6 @@ final class HomeViewModel: ObservableObject {
         searchText = ""
         selectedActivity = "All"
         selectedDateFilter = .all
-        selectedLocation = ""
-        searchRadius = 50
     }
     
     var activeFiltersCount: Int {
@@ -232,7 +226,48 @@ final class HomeViewModel: ObservableObject {
         if !searchText.isEmpty { count += 1 }
         if selectedActivity != "All" { count += 1 }
         if selectedDateFilter != .all { count += 1 }
-        if !selectedLocation.isEmpty || userLocation != nil { count += 1 }
         return count
     }
+    
+    func updateMapRegion() {
+        guard !filteredItems.isEmpty else { return }
+        
+        let coordinates = filteredItems.compactMap { $0.ride.pointDepart }
+        guard !coordinates.isEmpty else { return }
+        
+        let latitudes = coordinates.map { $0.latitude }
+        let longitudes = coordinates.map { $0.longitude }
+        
+        let minLat = latitudes.min() ?? 36.8065
+        let maxLat = latitudes.max() ?? 36.8065
+        let minLon = longitudes.min() ?? 10.1815
+        let maxLon = longitudes.max() ?? 10.1815
+        
+        let centerLat = (minLat + maxLat) / 2
+        let centerLon = (minLon + maxLon) / 2
+        
+        let spanLat = max((maxLat - minLat) * 1.5, 0.1)
+        let spanLon = max((maxLon - minLon) * 1.5, 0.1)
+        
+        mapRegion = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: centerLat, longitude: centerLon),
+            span: MKCoordinateSpan(latitudeDelta: spanLat, longitudeDelta: spanLon)
+        )
+    }
+    
+    func centerOnUserLocation(_ location: CLLocationCoordinate2D) {
+        mapRegion = MKCoordinateRegion(
+            center: location,
+            span: MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1)
+        )
+    }
+}
+
+struct RideAnnotation: Identifiable {
+    let id: String
+    let coordinate: CLLocationCoordinate2D
+    let title: String
+    let date: String?
+    let type: String?
+    let rideWithCreator: RideWithCreator
 }

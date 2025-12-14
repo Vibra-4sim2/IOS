@@ -202,6 +202,10 @@ struct TabBarView: View {
                 Button("Confirm", role: .destructive) {
                     do {
                         try KeychainManager.shared.deleteJWT()
+                        
+                        // 🔔 Stop notification polling on logout
+                        NotificationManager.shared.stopPolling()
+                        
                         isLoggedOut = true
                     } catch {
                         print("❌ Erreur logout: \(error)")

@@ -1,0 +1,409 @@
+//
+//  NotificationManager.swift
+//  VIBRA
+//
+//  Polling-based notification system - NO FCM/APNs required
+//  Works on simulator and real devices
+//
+
+import Foundation
+import UIKit
+import UserNotifications
+
+final class NotificationManager: NSObject {
+    
+    // MARK: - Singleton
+    static let shared = NotificationManager()
+    
+    // MARK: - Properties
+    private var pollingTimer: Timer?
+    private var jwtToken: String?
+    private let baseURL = Constants.baseURL
+    private let pollingInterval: TimeInterval = 30 // Poll every 30 seconds
+    
+    // Track displayed notifications to avoid duplicates
+    private var displayedNotificationIds = Set<String>()
+    
+    // Notification names for routing
+    static let navigateToPublication = Notification.Name("navigateToPublication")
+    static let navigateToChatMessage = Notification.Name("navigateToChatMessage")
+    static let navigateToRide = Notification.Name("navigateToRide")
+    
+    // MARK: - Init
+    private override init() {
+        super.init()
+        loadDisplayedNotifications()
+    }
+    
+    // MARK: - Public Methods
+    
+    /// Start polling for notifications after login
+    func startPolling(withJWT token: String) {
+        // Stop any existing timer FIRST (without clearing token)
+        pollingTimer?.invalidate()
+        pollingTimer = nil
+        
+        // NOW set the new token
+        self.jwtToken = token
+        
+        print("🔔 NotificationManager: Starting notification polling every \(pollingInterval)s")
+        
+        // Poll immediately, then schedule timer
+        pollNotifications()
+        
+        pollingTimer = Timer.scheduledTimer(
+            withTimeInterval: pollingInterval,
+            repeats: true
+        ) { [weak self] _ in
+            self?.pollNotifications()
+        }
+        
+        // Update badge count immediately
+        updateBadgeCount()
+    }
+    
+    /// Stop polling (on logout)
+    func stopPolling() {
+        pollingTimer?.invalidate()
+        pollingTimer = nil
+        jwtToken = nil
+        print("🔔 NotificationManager: Stopped polling")
+        
+        // Reset badge count
+        DispatchQueue.main.async {
+            UIApplication.shared.applicationIconBadgeNumber = 0
+        }
+    }
+    
+    /// Request notification permissions
+    func requestNotificationPermissions(completion: @escaping (Bool) -> Void) {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+            if let error = error {
+                print("❌ NotificationManager: Permission error: \(error.localizedDescription)")
+                completion(false)
+                return
+            }
+            
+            if granted {
+                print("✅ NotificationManager: Notification permissions granted")
+            } else {
+                print("⚠️ NotificationManager: Notification permissions denied")
+            }
+            
+            completion(granted)
+        }
+    }
+    
+    // MARK: - Private Methods
+    
+    /// Poll backend for unread notifications
+    private func pollNotifications() {
+        guard let token = jwtToken else {
+            print("⚠️ NotificationManager: No JWT token available")
+            return
+        }
+        
+        let endpoint = "\(baseURL)/notifications?unreadOnly=true&limit=10"
+        
+        guard let url = URL(string: endpoint) else {
+            print("❌ NotificationManager: Invalid URL")
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
+            guard let self = self else { return }
+            
+            if let error = error {
+                print("❌ NotificationManager: Network error: \(error.localizedDescription)")
+                return
+            }
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                print("❌ NotificationManager: Invalid response")
+                return
+            }
+            
+            guard (200...299).contains(httpResponse.statusCode) else {
+                print("❌ NotificationManager: HTTP error \(httpResponse.statusCode)")
+                if let data = data, let errorMessage = String(data: data, encoding: .utf8) {
+                    print("   Server response: \(errorMessage)")
+                }
+                return
+            }
+            
+            guard let data = data else {
+                print("❌ NotificationManager: No data received")
+                return
+            }
+            
+            do {
+                let notifications = try JSONDecoder().decode([NotificationItem].self, from: data)
+                print("📬 NotificationManager: Received \(notifications.count) unread notifications")
+                
+                // Process new notifications
+                self.processNotifications(notifications)
+                
+                // Update badge count
+                self.updateBadgeCount()
+                
+            } catch {
+                print("❌ NotificationManager: Decoding error: \(error)")
+                if let jsonString = String(data: data, encoding: .utf8) {
+                    print("   Raw JSON: \(jsonString)")
+                }
+            }
+        }.resume()
+    }
+    
+    /// Process and display new notifications
+    private func processNotifications(_ notifications: [NotificationItem]) {
+        for notification in notifications {
+            // Check if already displayed
+            if displayedNotificationIds.contains(notification.id) {
+                continue
+            }
+            
+            // Display local notification
+            showLocalNotification(notification)
+            
+            // Mark as displayed
+            displayedNotificationIds.insert(notification.id)
+            
+            // Mark as read on backend
+            // DON't mark as read automatically - only when user taps
+        }
+        
+        // Save displayed IDs
+        saveDisplayedNotifications()
+    }
+    
+    /// Show local notification
+    private func showLocalNotification(_ notification: NotificationItem) {
+        let content = UNMutableNotificationContent()
+        content.title = notification.title
+        content.body = notification.body
+        content.sound = .default
+        
+        // Build userInfo for deep linking
+        var userInfo: [String: Any] = [
+            "notificationId": notification.id,
+            "type": notification.type,
+            "title": notification.title,
+            "body": notification.body
+        ]
+        
+        // Add all data fields
+        let dataDict = notification.data.toDictionary()
+        for (key, value) in dataDict {
+            userInfo[key] = value
+        }
+        
+        content.userInfo = userInfo
+        
+        // Update badge (increment by 1)
+        let currentBadge = UIApplication.shared.applicationIconBadgeNumber
+        content.badge = NSNumber(value: currentBadge + 1)
+        
+        // Create request with nil trigger to persist in Notification Center
+        let request = UNNotificationRequest(
+            identifier: notification.id,
+            content: content,
+            trigger: nil  // nil = immediate delivery + stays in Notification Center
+        )
+        
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("❌ NotificationManager: Failed to show notification: \(error.localizedDescription)")
+            } else {
+                print("✅ NotificationManager: Displayed notification: \(notification.title)")
+            }
+        }
+    }
+    
+    /// Mark notification as read on backend
+    private func markAsRead(notificationId: String) {
+        guard let token = jwtToken else { return }
+        
+        let endpoint = "\(baseURL)/notifications/\(notificationId)/read"
+        
+        guard let url = URL(string: endpoint) else {
+            print("❌ NotificationManager: Invalid URL for mark as read")
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("❌ NotificationManager: Mark as read error: \(error.localizedDescription)")
+                return
+            }
+            
+            guard let httpResponse = response as? HTTPURLResponse else { return }
+            
+            if (200...299).contains(httpResponse.statusCode) {
+                print("✅ NotificationManager: Marked as read: \(notificationId)")
+            } else {
+                print("⚠️ NotificationManager: Failed to mark as read (HTTP \(httpResponse.statusCode))")
+            }
+        }.resume()
+    }
+    
+    /// Update app badge count
+    func updateBadgeCount() {
+        guard let token = jwtToken else { return }
+        
+        let endpoint = "\(baseURL)/notifications/unread-count"
+        
+        guard let url = URL(string: endpoint) else {
+            print("❌ NotificationManager: Invalid URL for badge count")
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.addValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("❌ NotificationManager: Badge count error: \(error.localizedDescription)")
+                return
+            }
+            
+            guard let data = data else { return }
+            
+            do {
+                let badgeResponse = try JSONDecoder().decode(BadgeResponse.self, from: data)
+                DispatchQueue.main.async {
+                    UIApplication.shared.applicationIconBadgeNumber = badgeResponse.count
+                    print("🔔 NotificationManager: Badge count updated to \(badgeResponse.count)")
+                }
+            } catch {
+                print("❌ NotificationManager: Badge count decoding error: \(error)")
+            }
+        }.resume()
+    }
+    
+    // MARK: - Persistence
+    
+    /// Save displayed notification IDs to UserDefaults
+    private func saveDisplayedNotifications() {
+        let ids = Array(displayedNotificationIds)
+        UserDefaults.standard.set(ids, forKey: "displayedNotificationIds")
+    }
+    
+    /// Load displayed notification IDs from UserDefaults
+    private func loadDisplayedNotifications() {
+        if let ids = UserDefaults.standard.array(forKey: "displayedNotificationIds") as? [String] {
+            displayedNotificationIds = Set(ids)
+            print("🔔 NotificationManager: Loaded \(ids.count) displayed notification IDs")
+        }
+    }
+    
+    /// Clear displayed notification history (useful for testing)
+    func clearDisplayedNotifications() {
+        displayedNotificationIds.removeAll()
+        UserDefaults.standard.removeObject(forKey: "displayedNotificationIds")
+        print("🔔 NotificationManager: Cleared displayed notification history")
+    }
+}
+
+// MARK: - UNUserNotificationCenterDelegate
+extension NotificationManager: UNUserNotificationCenterDelegate {
+    
+    /// Handle notification when app is in foreground
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        print("📬 NotificationManager: Notification received in foreground")
+        
+        // Show notification even in foreground AND keep in Notification Center
+        if #available(iOS 14.0, *) {
+            completionHandler([.banner, .list, .sound, .badge])
+        } else {
+            completionHandler([.alert, .sound, .badge])
+        }
+    }
+    
+    /// Handle notification tap
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let userInfo = response.notification.request.content.userInfo
+        
+        print("📬 NotificationManager: Notification tapped")
+        print("   UserInfo: \(userInfo)")
+        
+        handleNotificationTap(userInfo: userInfo)
+        
+        // Mark as read when user taps the notification
+        if let notificationId = userInfo["notificationId"] as? String {
+            markAsRead(notificationId: notificationId)
+        }
+        
+        completionHandler()
+    }
+    
+    /// Route to appropriate screen based on notification type
+    private func handleNotificationTap(userInfo: [AnyHashable: Any]) {
+        guard let type = userInfo["type"] as? String else {
+            print("⚠️ NotificationManager: No type in userInfo")
+            return
+        }
+        
+        print("🧭 NotificationManager: Routing to \(type)")
+        
+        // Route based on type
+        switch type {
+        case "new_publication":
+            if let publicationId = userInfo["publicationId"] as? String {
+                NotificationCenter.default.post(
+                    name: NotificationManager.navigateToPublication,
+                    object: nil,
+                    userInfo: ["publicationId": publicationId]
+                )
+                print("   → Navigate to publication: \(publicationId)")
+            }
+            
+        case "chat_message":
+            if let sortieId = userInfo["sortieId"] as? String,
+               let chatId = userInfo["chatId"] as? String {
+                NotificationCenter.default.post(
+                    name: NotificationManager.navigateToChatMessage,
+                    object: nil,
+                    userInfo: [
+                        "sortieId": sortieId,
+                        "chatId": chatId
+                    ]
+                )
+                print("   → Navigate to chat: \(chatId) in sortie: \(sortieId)")
+            }
+            
+        case "ride_update", "new_ride":
+            if let rideId = userInfo["rideId"] as? String {
+                NotificationCenter.default.post(
+                    name: NotificationManager.navigateToRide,
+                    object: nil,
+                    userInfo: ["rideId": rideId]
+                )
+                print("   → Navigate to ride: \(rideId)")
+            }
+            
+        default:
+            print("⚠️ NotificationManager: Unknown notification type: \(type)")
+        }
+    }
+}

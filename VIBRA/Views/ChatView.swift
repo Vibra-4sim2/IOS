@@ -114,6 +114,10 @@ struct ChatView: View {
                 .padding(.horizontal)
                 .padding(.vertical, 8)
             }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                hideKeyboard()
+            }
             .onChange(of: vm.messages.count) { _ in
                 scrollToBottom(proxy: proxy, animated: true)
             }
@@ -121,6 +125,11 @@ struct ChatView: View {
                 scrollToBottom(proxy: proxy, animated: false)
             }
         }
+    }
+    
+    // MARK: - Helpers
+    private func hideKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
     
     private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {

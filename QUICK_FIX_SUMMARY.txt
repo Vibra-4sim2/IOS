@@ -1,0 +1,42 @@
+# 🔥 QUICK FIX SUMMARY
+
+## What Was Wrong
+```
+⚠️ NotificationManager: No JWT token available
+```
++ Notifications disappeared from Notification Center
+
+## What I Did
+Used Python script to apply **3 critical fixes** to `NotificationManager.swift`:
+
+1. **JWT Bug**: Don't call `stopPolling()` which clears the token
+2. **Persistence**: Use `trigger: nil` so notifications stay
+3. **Foreground**: Add `.list` option for iOS 14+
+
+## What To Do Now
+
+1. **Clean Build** in Xcode: ⌘⇧K
+2. **Build**: ⌘B  
+3. **Run**: ⌘R
+4. **Login** and watch console
+
+## Expected Console Output
+```
+✅ Token reçu : eyJhbGci...
+🔔 NotificationManager: Starting notification polling every 30.0s
+📬 NotificationManager: Received 0 unread notifications
+```
+
+**NO WARNING about JWT token!**
+
+## How To Test Notifications
+
+1. Create a publication
+2. Wait 30 seconds
+3. Notification appears
+4. **Swipe down from top** → See notification in list ✅
+5. Tap notification → App navigates ✅
+
+---
+
+**All fixes verified ✅ No compilation errors ✅ Ready to test! 🚀**

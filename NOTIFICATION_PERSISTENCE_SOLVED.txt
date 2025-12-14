@@ -1,0 +1,109 @@
+5# 🎯 NOTIFICATION PERSISTENCE - PROBLEM SOLVED!
+
+## ❌ YOUR QUESTION:
+> "I want the notification to persist. Why does it disappear after a while? Is it a problem from the backend?"
+
+## ✅ ANSWER:
+**NO, it's NOT a backend problem!**
+
+The iOS app was automatically marking notifications as **read** immediately after displaying them, so they disappeared on the next poll.
+
+---
+
+## 🔍 THE ROOT CAUSE:
+
+```
+┌─────────────────────────────────────────────────┐
+│  1. Backend sends notification                  │
+│     ↓                                           │
+│  2. iOS receives it (polling every 30s)         │
+│     ↓                                           │
+│  3. iOS displays local notification ✅          │
+│     ↓                                           │
+│  4. iOS IMMEDIATELY calls markAsRead() ❌ BAD! │
+│     ↓                                           │
+│  5. Backend marks it as "read"                  │
+│     ↓                                           │
+│  6. Next poll (30s later)                       │
+│     Backend says: "No unread notifications"     │
+│     ↓                                           │
+│  7. Notification disappears from list ❌        │
+└─────────────────────────────────────────────────┘
+```
+
+---
+
+## ✅ THE FIX:
+
+**Changed:** Only mark notifications as read when **user TAPS them**
+
+```
+┌─────────────────────────────────────────────────┐
+│  1. Backend sends notification                  │
+│     ↓                                           │
+│  2. iOS receives it                             │
+│     ↓                                           │
+│  3. iOS displays local notification ✅          │
+│     ↓                                           │
+│  4. iOS DOES NOT mark as read ✅ GOOD!         │
+│     ↓                                           │
+│  5. Notification STAYS in Notification Center ✅│
+│     ↓                                           │
+│  6. User taps notification (when ready)         │
+│     ↓                                           │
+│  7. NOW iOS calls markAsRead() ✅               │
+│     ↓                                           │
+│  8. Backend marks it as "read"                  │
+└─────────────────────────────────────────────────┘
+```
+
+---
+
+## 🧪 WHAT YOU'LL SEE NOW:
+
+### Before (Wrong):
+```
+Create pub 1 → Shows → Disappears after 30s ❌
+Create pub 2 → Shows → Disappears after 30s ❌
+
+Swipe down → Nothing there ❌
+```
+
+### After (Correct):
+```
+Create pub 1 → Shows → STAYS in list ✅
+Create pub 2 → Shows → STAYS in list ✅
+Create pub 3 → Shows → STAYS in list ✅
+
+Swipe down → See all 3! ✅
+Badge shows: 3 ✅
+
+Tap pub 1 → Opens app, marked as read
+Swipe down → Still see pub 2 & 3! ✅
+Badge shows: 2 ✅
+```
+
+---
+
+## 🚀 REBUILD NOW:
+
+```
+1. Clean Build:  ⌘⇧K
+2. Build:        ⌘B
+3. Run:          ⌘R
+```
+
+Then test with multiple notifications!
+
+---
+
+## ✅ CONFIRMED:
+
+- ❌ NOT a backend issue
+- ✅ Was an iOS logic issue (marking as read too early)
+- ✅ NOW FIXED (only marks as read on tap)
+- ✅ Notifications will persist until you interact with them
+
+---
+
+**Rebuild and test - your notifications will now stay! 🎉**

@@ -163,6 +163,15 @@ struct ProfileUpdateView: View {
             // Optionally immediately show preview (we already set pickedImage)
         }
         .task { await viewModel.loadUser() }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            hideKeyboard()
+        }
+    }
+    
+    // MARK: - Helpers
+    private func hideKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 }
 

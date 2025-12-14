@@ -7,8 +7,8 @@
 import Foundation
 
 struct Constants {
-    //static let baseURL = "https://dam-4sim2.onrender.com"
-    static let baseURL = "http://localhost:3000"
+   // static let baseURL = "https://dam-4sim2.onrender.com"
+    static let baseURL = "http://localhost:10000"
     //static let baseURL = "http://192.168.1.20:3000"
     static let flaskURL = "https://flask-ai-api-1ynk.onrender.com/api"
     // ⚠️ Change selon ton backend

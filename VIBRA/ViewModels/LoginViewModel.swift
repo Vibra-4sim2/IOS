@@ -31,8 +31,11 @@ final class LoginViewModel: ObservableObject {
                 print("⚠️ Erreur sauvegarde JWT dans Keychain: \(error)")
             }
             
-            // Si tu veux garder "stayConnected" pour autre chose (par ex. une préférence utilisateur),
-            // tu peux encore le stocker dans UserDefaults ici si nécessaire.
+            // 🔔 Start notification polling after successful login
+            NotificationManager.shared.startPolling(withJWT: response.access_token)
+            
+            // 🔔 Update badge count
+            NotificationManager.shared.updateBadgeCount()
             
             // Marquer l'utilisateur comme connecté
             isLoggedIn = true
