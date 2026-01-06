@@ -29,9 +29,7 @@ struct HomeView: View {
                 VStack(spacing: 16) {
                     searchBar
                     matchingButton
-                    quickFiltersBar
-                    activityFilterBar
-                    mainFilterBar
+                    unifiedFilterBar
 
                     ScrollView {
                         LazyVStack(spacing: 20) {
@@ -132,112 +130,117 @@ struct HomeView: View {
         .padding(.bottom, 5)
     }
     
-    private var quickFiltersBar: some View {
+    private var unifiedFilterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
-                Button {
-                    showDatePicker = true
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: viewModel.selectedDateFilter.icon)
-                            .font(.caption)
-                        Text(viewModel.selectedDateFilter.rawValue)
-                            .font(.caption.weight(.medium))
-                        if viewModel.selectedDateFilter != .all {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.caption2)
-                                .foregroundColor(AppColors.GreenAccent)
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(
-                        viewModel.selectedDateFilter != .all
-                        ? AnyShapeStyle(LinearGradient(
-                            colors: [AppColors.GreenAccent.opacity(0.3), AppColors.TealAccent.opacity(0.3)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ))
-                        : AnyShapeStyle(AppColors.CardGlass)
-                    )
-                    .foregroundColor(AppColors.TextPrimary)
-                    .cornerRadius(12)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(
-                                viewModel.selectedDateFilter != .all
-                                ? AppColors.GreenAccent.opacity(0.5)
-                                : AppColors.DividerColor,
-                                lineWidth: 1
-                            )
-                    )
+                // Randonnée
+                ActivityFilterButton(
+                    title: "Randonnée",
+                    isSelected: viewModel.selectedActivity == "Randonnée"
+                ) {
+                    viewModel.selectedActivity = viewModel.selectedActivity == "Randonnée" ? "All" : "Randonnée"
                 }
                 
-                Button {
-                    showLocationSheet = true
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "location.fill")
-                            .font(.caption)
-                        Text(viewModel.userLocation != nil ? "À proximité" : "Localisation")
-                            .font(.caption.weight(.medium))
-                        if viewModel.userLocation != nil {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.caption2)
-                                .foregroundColor(AppColors.GreenAccent)
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(
-                        viewModel.userLocation != nil
-                        ? AnyShapeStyle(LinearGradient(
-                            colors: [AppColors.GreenAccent.opacity(0.3), AppColors.TealAccent.opacity(0.3)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ))
-                        : AnyShapeStyle(AppColors.CardGlass)
-                    )
-                    .foregroundColor(AppColors.TextPrimary)
-                    .cornerRadius(12)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(
-                                viewModel.userLocation != nil
-                                ? AppColors.GreenAccent.opacity(0.5)
-                                : AppColors.DividerColor,
-                                lineWidth: 1
-                            )
-                    )
+                // Vélo
+                ActivityFilterButton(
+                    title: "Vélo",
+                    isSelected: viewModel.selectedActivity == "Vélo"
+                ) {
+                    viewModel.selectedActivity = viewModel.selectedActivity == "Vélo" ? "All" : "Vélo"
                 }
                 
-                Button {
-                    showFiltersSheet = true
+                // Explore
+                FilterButton(
+                    title: "Explore",
+                    isSelected: viewModel.selectedTab == "Explore"
+                ) {
+                    viewModel.selectedTab = "Explore"
+                    Task {
+                        await viewModel.onTabChange()
+                    }
+                }
+                
+                // Recommendation
+                FilterButton(
+                    title: "Recommendation",
+                    isSelected: viewModel.selectedTab == "Recommendation"
+                ) {
+                    viewModel.selectedTab = "Recommendation"
+                    Task {
+                        await viewModel.onTabChange()
+                    }
+                }
+                
+                // Followers
+                FilterButton(
+                    title: "Followers",
+                    isSelected: viewModel.selectedTab == "Followers"
+                ) {
+                    viewModel.selectedTab = "Followers"
+                    Task {
+                        await viewModel.onTabChange()
+                    }
+                }
+                
+                // Plus de filtres (Date + Localisation)
+                Menu {
+                    Button {
+                        showDatePicker = true
+                    } label: {
+                        Label(viewModel.selectedDateFilter.rawValue, systemImage: viewModel.selectedDateFilter.icon)
+                    }
+                    
+                    Button {
+                        showLocationSheet = true
+                    } label: {
+                        Label(viewModel.userLocation != nil ? "À proximité" : "Localisation", systemImage: "location.fill")
+                    }
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
-                            .font(.caption)
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 13, weight: .semibold))
                         Text("Plus de filtres")
                             .font(.caption.weight(.medium))
-                        if viewModel.activeFiltersCount > 0 {
-                            Text("(\(viewModel.activeFiltersCount))")
+                        if viewModel.activeFiltersCount > 0 || viewModel.selectedDateFilter != .all || viewModel.userLocation != nil {
+                            Text("(\(calculateActiveExtendedFilters()))")
                                 .font(.caption2.weight(.bold))
                                 .foregroundColor(AppColors.GreenAccent)
                         }
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(AppColors.CardGlass)
-                    .foregroundColor(AppColors.TextPrimary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(
+                        (viewModel.activeFiltersCount > 0 || viewModel.selectedDateFilter != .all || viewModel.userLocation != nil)
+                        ? AnyShapeStyle(LinearGradient(
+                            colors: [AppColors.GreenAccent.opacity(0.3), AppColors.TealAccent.opacity(0.3)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ))
+                        : AnyShapeStyle(AppColors.CardGlass)
+                    )
                     .cornerRadius(12)
+                    .foregroundColor(AppColors.TextPrimary)
                     .overlay(
                         RoundedRectangle(cornerRadius: 12)
-                            .stroke(AppColors.DividerColor, lineWidth: 1)
+                            .stroke(
+                                (viewModel.activeFiltersCount > 0 || viewModel.selectedDateFilter != .all || viewModel.userLocation != nil)
+                                ? AppColors.GreenAccent.opacity(0.5)
+                                : AppColors.DividerColor,
+                                lineWidth: 0.8
+                            )
                     )
+                    .shadow(color: AppColors.ShadowColor.opacity(0.3), radius: 6, x: 0, y: 3)
                 }
             }
             .padding(.horizontal)
         }
+    }
+    
+    private func calculateActiveExtendedFilters() -> Int {
+        var count = viewModel.activeFiltersCount
+        if viewModel.selectedDateFilter != .all { count += 1 }
+        if viewModel.userLocation != nil { count += 1 }
+        return count
     }
     
     private func hideKeyboard() {
@@ -370,68 +373,6 @@ struct HomeView: View {
         .padding(.horizontal)
     }
 
-    private var activityFilterBar: some View {
-        HStack(spacing: 10) {
-            ActivityFilterButton(
-                title: "All",
-                isSelected: viewModel.selectedActivity == "All"
-            ) {
-                viewModel.selectedActivity = "All"
-            }
-
-            ActivityFilterButton(
-                title: "Randonnée",
-                isSelected: viewModel.selectedActivity == "Randonnée"
-            ) {
-                viewModel.selectedActivity = "Randonnée"
-            }
-
-            ActivityFilterButton(
-                title: "Vélo",
-                isSelected: viewModel.selectedActivity == "Vélo"
-            ) {
-                viewModel.selectedActivity = "Vélo"
-            }
-
-            Spacer()
-        }
-        .padding(.horizontal)
-    }
-
-    private var mainFilterBar: some View {
-        HStack(spacing: 10) {
-            FilterButton(
-                title: "Followers",
-                isSelected: viewModel.selectedTab == "Followers"
-            ) {
-                viewModel.selectedTab = "Followers"
-                Task {
-                    await viewModel.onTabChange()
-                }
-            }
-
-            FilterButton(
-                title: "Recommendation",
-                isSelected: viewModel.selectedTab == "Recommendation"
-            ) {
-                viewModel.selectedTab = "Recommendation"
-                Task {
-                    await viewModel.onTabChange()
-                }
-            }
-
-            FilterButton(
-                title: "Explore",
-                isSelected: viewModel.selectedTab == "Explore"
-            ) {
-                viewModel.selectedTab = "Explore"
-                Task {
-                    await viewModel.onTabChange()
-                }
-            }
-        }
-        .padding(.horizontal)
-    }
 
     @ViewBuilder
     private func errorStateView(error: String) -> some View {

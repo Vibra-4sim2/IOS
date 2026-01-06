@@ -2,14 +2,15 @@ import SwiftUI
 
 struct TabBarView: View {
     @EnvironmentObject var ratingPromptViewModel: RatingPromptViewModel
+    @StateObject private var notificationViewModel = NotificationViewModel()
     @State private var showOptions = false
     @State private var showLogoutAlert = false
     @State private var isLoggedOut = false
 
-    // Pour ouvrir la création (bouton flottant)
+    // For opening the creation (floating button)
     @State private var showCreateModal: Bool = false
 
-    // Gestion manuelle de l'onglet sélectionné
+    // Manual management of the selected tab
     @State private var selectedTab: Int = 0
     @State private var lastValidTab: Int = 0
 
@@ -17,9 +18,9 @@ struct TabBarView: View {
         NavigationStack {
             ZStack(alignment: .top) {
 
-                // MARK: - Contenu principal (TabView AVEC SLOT VIDE INACTIF)
+                // MARK: - Main content (TabView WITH INACTIVE EMPTY SLOT)
                 VStack(spacing: 0) {
-                    Spacer(minLength: 60) // espace pour la top bar
+                    Spacer(minLength: 60) // space for the top bar
 
                     TabView(selection: $selectedTab) {
                         HomeView()
@@ -29,17 +30,17 @@ struct TabBarView: View {
                             }
                             .tag(0)
 
-                        MapView()
+                        MessagesHubView()
                             .tabItem {
-                                Image(systemName: "map.fill")
-                                Text("Map")
+                                Image(systemName: "message.fill")
+                                Text("Messages")
                             }
                             .tag(1)
 
-                        // SLOT VIDE au milieu : occupe la place, mais qu'on bloque via `onChange`
+                        // EMPTY SLOT in the middle: takes up space, but we block via `onChange`
                         Color.clear
                             .tabItem {
-                                Text(" ") // minimum pour garder l'emplacement
+                                Text(" ") // minimum to keep the location
                             }
                             .tag(2)
 
@@ -50,15 +51,15 @@ struct TabBarView: View {
                             }
                             .tag(3)
 
-                        MyRidesHomeView()
+                        ProfileView()
                             .tabItem {
-                                Image(systemName: "person.text.rectangle")
-                                Text("My Rides")
+                                Image(systemName: "person.crop.circle.fill")
+                                Text("Profile")
                             }
                             .tag(4)
                     }
                     .onChange(of: selectedTab) { newValue in
-                        // Si on essaie de sélectionner le slot vide (2), on revient au dernier vrai onglet
+                        // If trying to select the empty slot (2), revert to the last valid tab
                         if newValue == 2 {
                             selectedTab = lastValidTab
                         } else {
@@ -66,19 +67,20 @@ struct TabBarView: View {
                         }
                     }
                     .accentColor(AppColors.GreenAccent)
-                    .background(
-                        LinearGradient(
-                            gradient: Gradient(colors: [AppColors.BackgroundGradientStart, AppColors.BackgroundGradientEnd]),
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                        .ignoresSafeArea()
-                    )
                 }
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [AppColors.BackgroundGradientStart, AppColors.BackgroundGradientEnd]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                    .ignoresSafeArea()
+                )
 
                 // MARK: - Top Bar
                 VStack(spacing: 0) {
                     HStack {
+                        // Logo and name VIBRA - ON THE LEFT
                         Image("vibra_logo_white")
                             .resizable()
                             .scaledToFit()
@@ -92,6 +94,36 @@ struct TabBarView: View {
 
                         Spacer()
 
+                        // Map - At the top (replaces Messages)
+                        NavigationLink {
+                            MapView(showBackButton: true)
+                        } label: {
+                            Image(systemName: "map.fill")
+                                .font(.system(size: 22))
+                                .foregroundColor(AppColors.GreenAccent)
+                                .padding(.horizontal, 4)
+                        }
+
+                        // Notification Bell with Badge
+                        ZStack {
+                            NavigationLink {
+                                NotificationsView()
+                            } label: {
+                                Image(systemName: "bell.fill")
+                                    .font(.system(size: 22))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 4)
+                            }
+                            
+                            if notificationViewModel.hasUnreadNotifications {
+                                Circle()
+                                    .fill(Color.red)
+                                    .frame(width: 10, height: 10)
+                                    .offset(x: 10, y: -10)
+                            }
+                        }
+                        
+                        // Menu button (3 bars) - RIGHT
                         Button(action: {
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                 showOptions.toggle()
@@ -108,46 +140,29 @@ struct TabBarView: View {
                                 )
                                 .shadow(color: AppColors.ShadowColor.opacity(0.7), radius: 6, x: 0, y: 3)
                         }
-
-                        NavigationLink {
-                            ChatsListView()
-                        } label: {
-                            Image(systemName: "bubble.left.and.bubble.right.fill")
-                                .font(.system(size: 24))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 6)
-                        }
-
-                        NavigationLink {
-                            ProfileView()
-                        } label: {
-                            Image(systemName: "person.crop.circle")
-                                .font(.system(size: 28))
-                                .foregroundColor(.white)
-                                .padding(.leading, 2)
-                        }
                     }
                     .padding(.horizontal)
                     .padding(.top, 10)
                     .padding(.bottom, 10)
                     .background(
-                        LinearGradient(
-                            gradient: Gradient(colors: [AppColors.CardDark.opacity(0.95), AppColors.CardDark.opacity(0.85)]),
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
+                        AppColors.CardDark.opacity(0.95)
                     )
-                    .overlay(
-                        Rectangle()
-                            .frame(height: 0.5)
-                            .foregroundColor(AppColors.DividerColor),
-                        alignment: .bottom
-                    )
-                    .shadow(color: AppColors.ShadowColor.opacity(0.9), radius: 8, x: 0, y: 4)
 
                     if showOptions {
                         VStack(alignment: .leading, spacing: 10) {
-                            MenuItemView(icon: "bookmark", label: "Saved")
+                            // Requests (was Mes Sorties)
+                            NavigationLink {
+                                MyRidesHomeView(showBackButton: true)
+                            } label: {
+                                MenuItemView(icon: "tray.full", label: "Requests")
+                            }
+                            
+                            NavigationLink {
+                                SavedRidesView()
+                            } label: {
+                                MenuItemView(icon: "bookmark", label: "Saved")
+                            }
+                            
                             MenuItemView(icon: "questionmark.circle", label: "Help Center")
                             MenuItemView(icon: "gearshape", label: "Settings")
 
@@ -169,7 +184,7 @@ struct TabBarView: View {
                     Spacer()
                 }
 
-                // MARK: - Bouton flottant vert (Add) CENTRÉ, PLUS GRAND, PLUS BAS
+                // MARK: - Large green floating button (Add) CENTERED, LARGER, LOWER
                 VStack {
                     Spacer()
                     HStack {
@@ -178,9 +193,9 @@ struct TabBarView: View {
                             showCreateModal = true
                         } label: {
                             Image(systemName: "plus")
-                                .font(.system(size: 24, weight: .bold))   // plus grand
+                                .font(.system(size: 24, weight: .bold))   // larger
                                 .foregroundColor(.black)
-                                .padding(18)                               // plus grand
+                                .padding(18)                               // larger
                                 .background(AppColors.GreenAccent)
                                 .clipShape(Circle())
                                 .shadow(color: AppColors.ShadowColor.opacity(0.85),
@@ -188,7 +203,7 @@ struct TabBarView: View {
                         }
                         Spacer()
                     }
-                    .padding(.bottom, 12) // très bas, proche de la TabBar
+                    .padding(.bottom, 12) // very low, close to the TabBar
                 }
 
                 // MARK: - Rating popup overlay on top of everything
@@ -204,14 +219,14 @@ struct TabBarView: View {
                         try KeychainManager.shared.deleteJWT()
                         isLoggedOut = true
                     } catch {
-                        print("❌ Erreur logout: \(error)")
+                        print("❌ Error logout: \(error)")
                     }
                 }
             }, message: {
                 Text("Are you sure you want to logout?")
             })
 
-            // MARK: - Navigation vers Login après logout
+            // MARK: - Navigation to Login after logout
             NavigationLink(
                 destination: LoginView()
                     .navigationBarBackButtonHidden(true)
@@ -223,7 +238,7 @@ struct TabBarView: View {
             .opacity(0)
             .preferredColorScheme(.dark)
 
-            // MARK: - Full screen modal pour CreateSortie (lié au bouton flottant)
+            // MARK: - Full screen modal for CreateSortie (linked to the floating button)
             .fullScreenCover(isPresented: $showCreateModal) {
                 NavigationStack {
                     CreateSortieView()
@@ -241,11 +256,43 @@ struct TabBarView: View {
         .onAppear {
             print("[RatingPrompt] TabBarView appeared → checking eligibility")
             ratingPromptViewModel.onSceneBecameActive()
+            
+            // Setup notification tap handler
+            setupNotificationTapHandler()
+        }
+    }
+    
+    // MARK: - Notification Tap Handler
+    
+    private func setupNotificationTapHandler() {
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("HandleNotificationTap"),
+            object: nil,
+            queue: .main
+        ) { [self] notification in
+            guard let userInfo = notification.userInfo,
+                  let type = userInfo["type"] as? String else {
+                return
+            }
+            
+            print("🔔 Handling notification tap: \(type)")
+            
+            // Navigate based on notification type
+            switch type {
+            case "private_message":
+                selectedTab = 0
+            case "group_message":
+                selectedTab = 0
+            case "new_participant", "sortie_update", "sortie_reminder":
+                selectedTab = 4
+            default:
+                break
+            }
         }
     }
 }
 
-// MARK: - Élément du menu
+// MARK: - Menu item element
 struct MenuItemView: View {
     var icon: String
     var label: String

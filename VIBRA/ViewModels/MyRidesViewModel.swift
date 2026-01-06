@@ -177,8 +177,18 @@ final class MyRidesViewModel: ObservableObject {
         }
 
         do {
+            print("🔄 Updating participation \(participationId) to \(status)...")
             _ = try await ParticipationService.shared.updateParticipationStatus(id: participationId, status: status)
-            // Après MAJ, on recharge les participations en attente
+            print("✅ Participation \(participationId) updated to \(status)")
+            
+            // Remove the participation from local cache immediately for instant UI feedback
+            if var pendingList = pendingParticipationsByRideId[rideId] {
+                pendingList.removeAll { $0.id == participationId }
+                pendingParticipationsByRideId[rideId] = pendingList
+                objectWillChange.send()
+            }
+            
+            // Après MAJ, on recharge les participations en attente pour s'assurer de la synchronisation
             await loadPendingParticipationsForMyRides()
         } catch {
             print("❌ updateParticipation error:", error)

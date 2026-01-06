@@ -19,11 +19,22 @@ struct AddPublicationView: View {
 
     @Environment(\.dismiss) private var dismiss
     @StateObject private var viewModel = AddPublicationViewModel()
+    
+    /// Callback pour fermer la vue (utilisé quand navigationDestination ne fonctionne pas bien)
+    var onDismiss: (() -> Void)?
 
     @State private var showTagSheet = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var showSuccessAlert = false
     @State private var publishedId: String?
+    
+    private func closeView() {
+        if let onDismiss = onDismiss {
+            onDismiss()
+        } else {
+            dismiss()
+        }
+    }
 
     var body: some View {
         ZStack {
@@ -96,7 +107,7 @@ struct AddPublicationView: View {
         }
         .alert("Publication publiée", isPresented: $showSuccessAlert) {
             Button("OK") {
-                dismiss() // retour vers FeedView
+                closeView() // retour vers FeedView
             }
         } message: {
             Text("Votre publication a été ajoutée au feed.")
@@ -105,6 +116,8 @@ struct AddPublicationView: View {
         .onTapGesture {
             hideKeyboard()
         }
+        .navigationBarBackButtonHidden(true)
+        .navigationBarHidden(true)
     }
     
     // MARK: - Helpers
@@ -116,17 +129,21 @@ struct AddPublicationView: View {
 
     private var topBar: some View {
         HStack {
-            Button(action: { dismiss() }) {
+            Button(action: { closeView() }) {
                 Image(systemName: "xmark")
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(TextPrimary)
+                    .padding(8)
+                    .background(Color.white.opacity(0.1))
+                    .clipShape(Circle())
             }
             Spacer()
             Text("New Post")
                 .foregroundColor(TextPrimary)
                 .font(.system(size: 18, weight: .bold))
             Spacer()
-            Image(systemName: "xmark")
-                .foregroundColor(.clear)
+            // Espace invisible pour centrer le titre
+            Color.clear.frame(width: 32, height: 32)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -252,7 +269,7 @@ struct AddPublicationView: View {
     }
 
     private var actionsRow: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 16) {
             PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                 AddActionButton(systemImage: "photo", label: "Photo",
                                 color: Color(red: 0x3B/255, green: 0x82/255, blue: 0xF6/255))
@@ -261,8 +278,6 @@ struct AddPublicationView: View {
                 AddActionButton(systemImage: "tag", label: "Tag",
                                 color: Color(red: 0xF5/255, green: 0x9E/255, blue: 0x0B/255))
             }
-            AddActionButton(systemImage: "at", label: "Mention", color: GreenAccent)
-            AddActionButton(systemImage: "location", label: "Location", color: RedAccent)
         }
     }
 

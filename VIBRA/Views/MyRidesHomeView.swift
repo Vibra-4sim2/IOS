@@ -2,6 +2,10 @@ import SwiftUI
 
 struct MyRidesHomeView: View {
     @StateObject private var viewModel = MyRidesViewModel()
+    @Environment(\.dismiss) private var dismiss
+    
+    // Only show back button when pushed via NavigationLink (not when in TabBar)
+    var showBackButton: Bool = false
 
     var body: some View {
         NavigationStack {
@@ -24,7 +28,7 @@ struct MyRidesHomeView: View {
                                     .progressViewStyle(.circular)
                                     .tint(AppColors.GreenAccent)
                                     .padding()
-                                Text("Chargement de mes sorties...")
+                                Text("Loading my rides...")
                                     .foregroundColor(AppColors.TextSecondary)
                                     .font(.caption)
                             } else if let error = viewModel.errorMessage {
@@ -34,56 +38,31 @@ struct MyRidesHomeView: View {
                             } else if viewModel.myItems.isEmpty {
                                 emptyStateView
                             } else {
+                                // Section des demandes de participation
                                 if viewModel.totalPendingCount > 0 {
+                                    pendingRequestsSection
+                                }
+                                
+                                // Section de toutes mes sorties
+                                VStack(alignment: .leading, spacing: 12) {
                                     HStack {
-                                        Image(systemName: "bell.badge.fill")
+                                        Image(systemName: "calendar")
                                             .foregroundColor(AppColors.GreenAccent)
-                                        Text("\(viewModel.totalPendingCount) demande(s) de participation en attente")
+                                        Text("My Rides (\(viewModel.myItems.count))")
                                             .foregroundColor(AppColors.TextPrimary)
-                                            .font(.caption)
+                                            .font(.subheadline.weight(.semibold))
                                         Spacer()
                                     }
-                                    .padding(10)
-                                    .background(AppColors.CardDark.opacity(0.9))
-                                    .cornerRadius(12)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .stroke(AppColors.BorderColor, lineWidth: 0.6)
-                                    )
-                                }
-
-                                ForEach(viewModel.myItems, id: \.ride.id) { item in
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        ZStack(alignment: .topTrailing) {
-                                            NavigationLink(
-                                                destination: SortieDetailView(ride: item.ride, creator: item.creator)
-                                            ) {
-                                                RideCardView(item: item)
-                                                    .contentShape(Rectangle())
-                                            }
-                                            .buttonStyle(.plain)
-
-                                            if let rideId = item.ride.id {
-                                                let pending = viewModel.pendingParticipations(for: rideId)
-                                                if !pending.isEmpty {
-                                                    Text("\(pending.count)")
-                                                        .font(.caption2.weight(.bold))
-                                                        .foregroundColor(.black)
-                                                        .padding(.horizontal, 6)
-                                                        .padding(.vertical, 2)
-                                                        .background(AppColors.GreenAccent)
-                                                        .cornerRadius(10)
-                                                        .padding(8)
-                                                }
-                                            }
+                                    .padding(.horizontal, 4)
+                                    
+                                    ForEach(viewModel.myItems, id: \.ride.id) { item in
+                                        NavigationLink(
+                                            destination: SortieDetailView(ride: item.ride, creator: item.creator)
+                                        ) {
+                                            RideCardView(item: item)
+                                                .contentShape(Rectangle())
                                         }
-
-                                        if let rideId = item.ride.id {
-                                            let pending = viewModel.pendingParticipations(for: rideId)
-                                            if !pending.isEmpty {
-                                                pendingSection(pending, rideId: rideId, for: item.ride)
-                                            }
-                                        }
+                                        .buttonStyle(.plain)
                                     }
                                 }
                             }
@@ -107,6 +86,115 @@ struct MyRidesHomeView: View {
         }
     }
     
+    // MARK: - Pending Requests Section
+    
+    private var pendingRequestsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "bell.badge.fill")
+                    .foregroundColor(AppColors.GreenAccent)
+                Text("Requests (\(viewModel.totalPendingCount))")
+                    .foregroundColor(AppColors.TextPrimary)
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+            }
+            .padding(.horizontal, 4)
+            
+            // List of rides with pending requests
+            ForEach(ridesWithPendingRequests, id: \.ride.id) { item in
+                NavigationLink(destination: PendingParticipantsView(
+                    ride: item.ride,
+                    viewModel: viewModel
+                )) {
+                    pendingRideRow(item: item)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(12)
+        .background(AppColors.CardDark.opacity(0.9))
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(AppColors.GreenAccent.opacity(0.3), lineWidth: 1)
+        )
+    }
+    
+    private var ridesWithPendingRequests: [RideWithCreator] {
+        viewModel.myItems.filter { item in
+            guard let rideId = item.ride.id else { return false }
+            return !viewModel.pendingParticipations(for: rideId).isEmpty
+        }
+    }
+    
+    private func pendingRideRow(item: RideWithCreator) -> some View {
+        let pendingCount = viewModel.pendingParticipations(for: item.ride.id).count
+        
+        return HStack(spacing: 12) {
+            // Ride image
+            if let imageUrl = item.ride.photo, let url = URL(string: imageUrl) {
+                AsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(AppColors.CardGlass)
+                }
+                .frame(width: 60, height: 60)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            } else {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(AppColors.CardGlass)
+                    .frame(width: 60, height: 60)
+                    .overlay(
+                        Image(systemName: item.ride.type == "Vélo" ? "bicycle" : "figure.hiking")
+                            .foregroundColor(AppColors.TextSecondary)
+                    )
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.ride.titre)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(AppColors.TextPrimary)
+                    .lineLimit(1)
+                
+                HStack(spacing: 4) {
+                    Image(systemName: "person.badge.clock.fill")
+                        .font(.caption2)
+                        .foregroundColor(AppColors.GreenAccent)
+                    Text("\(pendingCount) pending request\(pendingCount > 1 ? "s" : "")")
+                        .font(.caption)
+                        .foregroundColor(AppColors.TextSecondary)
+                }
+            }
+            
+            Spacer()
+            
+            // Badge count + chevron
+            HStack(spacing: 8) {
+                Text("\(pendingCount)")
+                    .font(.caption.weight(.bold))
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(AppColors.GreenAccent)
+                    .clipShape(Capsule())
+                
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(AppColors.TextSecondary)
+            }
+        }
+        .padding(10)
+        .background(AppColors.CardGlass)
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(AppColors.DividerColor, lineWidth: 0.6)
+        )
+    }
+    
     // MARK: - Helpers
     private func hideKeyboard() {
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
@@ -119,7 +207,7 @@ struct MyRidesHomeView: View {
             Image(systemName: "magnifyingglass")
                 .foregroundColor(AppColors.TextSecondary)
 
-            TextField("Rechercher dans mes sorties...", text: $viewModel.searchText)
+            TextField("Search in my rides...", text: $viewModel.searchText)
                 .foregroundColor(AppColors.TextPrimary)
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
@@ -149,7 +237,19 @@ struct MyRidesHomeView: View {
 
     private var headerInfo: some View {
         HStack {
-            Text("Mes sorties")
+            // Back Button
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(AppColors.GreenAccent)
+                    .padding(10)
+                    .background(AppColors.CardGlass)
+                    .clipShape(Circle())
+            }
+            
+            Text("My Rides")
                 .font(.headline.weight(.semibold))
                 .foregroundColor(AppColors.TextPrimary)
 
@@ -158,96 +258,12 @@ struct MyRidesHomeView: View {
             HStack(spacing: 6) {
                 Image(systemName: "bell")
                     .foregroundColor(AppColors.TextSecondary)
-                Text("\(viewModel.totalPendingCount) en attente")
+                Text("\(viewModel.totalPendingCount) pending")
                     .foregroundColor(AppColors.TextPrimary)
                     .font(.caption)
             }
         }
         .padding(.horizontal)
-    }
-
-    // MARK: - Section participations
-
-    @ViewBuilder
-    private func pendingSection(_ participations: [Participation], rideId: String, for ride: Ride) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Image(systemName: "person.3.fill")
-                    .foregroundColor(AppColors.GreenAccent)
-                Text("\(participations.count) participation(s) en attente")
-                    .foregroundColor(AppColors.TextPrimary)
-                    .font(.caption)
-                Spacer()
-            }
-
-            ForEach(participations) { p in
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Demande de participation")
-                            .foregroundColor(AppColors.TextPrimary)
-                            .font(.caption.weight(.semibold))
-
-                        if let email = p.user?.email {
-                            Text(email)
-                                .foregroundColor(AppColors.TextSecondary)
-                                .font(.caption2)
-                        } else if let userId = p.user?.id {
-                            Text("userId: \(userId)")
-                                .foregroundColor(AppColors.TextSecondary)
-                                .font(.caption2)
-                        }
-                    }
-                    Spacer()
-
-                    // BOUTONS REFUSER + ACCEPTER
-                    HStack(spacing: 8) {
-                        // BOUTON REFUSER
-                        Button {
-                            Task {
-                                await viewModel.refuseParticipation(p, forRideId: rideId)
-                                // ou si tu n'as qu'une fonction générique :
-                                // await viewModel.updateParticipation(p, to: "REFUSEE", forRideId: rideId)
-                            }
-                        } label: {
-                            Text("Refuser")
-                                .font(.caption2.bold())
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.red)
-                                .foregroundColor(.white)
-                                .cornerRadius(8)
-                        }
-
-                        // BOUTON ACCEPTER
-                        Button {
-                            Task {
-                                await viewModel.acceptParticipation(p, forRideId: rideId)
-                                // ou :
-                                // await viewModel.updateParticipation(p, to: "ACCEPTEE", forRideId: rideId)
-                            }
-                        } label: {
-                            Text("Accepter")
-                                .font(.caption2.bold())
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(AppColors.GreenAccent)
-                                .foregroundColor(.black)
-                                .cornerRadius(8)
-                        }
-                    }
-                }
-                .padding(8)
-                .background(AppColors.CardDark.opacity(0.9))
-                .cornerRadius(10)
-            }
-        }
-        .padding(8)
-        .background(AppColors.CardGlass.opacity(0.9))
-        .cornerRadius(12)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(AppColors.BorderColor, lineWidth: 0.6)
-        )
     }
 
     // MARK: - Error / Empty / Not logged
@@ -258,7 +274,7 @@ struct MyRidesHomeView: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.largeTitle)
                 .foregroundColor(.red)
-            Text("Erreur de chargement")
+            Text("Loading Error")
                 .foregroundColor(.red)
                 .font(.headline)
             Text(error)
@@ -268,7 +284,7 @@ struct MyRidesHomeView: View {
             Button {
                 Task { await viewModel.load() }
             } label: {
-                Text("Réessayer")
+                Text("Retry")
                     .font(.subheadline.weight(.semibold))
                     .padding(.horizontal, 20)
                     .padding(.vertical, 8)
@@ -292,10 +308,10 @@ struct MyRidesHomeView: View {
             Image(systemName: "person.crop.circle.badge.exclamationmark")
                 .font(.largeTitle)
                 .foregroundColor(AppColors.TextTertiary)
-            Text("Non connecté")
+            Text("Not logged in")
                 .foregroundColor(AppColors.TextPrimary)
                 .font(.headline)
-            Text("Connecte-toi pour voir tes propres sorties et les demandes de participation.")
+            Text("Log in to see your own rides and participation requests.")
                 .foregroundColor(AppColors.TextSecondary)
                 .font(.caption)
         }
@@ -314,10 +330,10 @@ struct MyRidesHomeView: View {
             Image(systemName: "tray.fill")
                 .font(.largeTitle)
                 .foregroundColor(AppColors.TextTertiary)
-            Text("Aucune sortie créée")
+            Text("No rides created")
                 .foregroundColor(AppColors.TextPrimary)
                 .font(.headline)
-            Text("Tu n'as pas encore créé de sortie ou aucune ne correspond à ta recherche.")
+            Text("You haven't created any rides yet or none match your search.")
                 .foregroundColor(AppColors.TextSecondary)
                 .font(.caption)
         }

@@ -31,8 +31,19 @@ final class LoginViewModel: ObservableObject {
                 print("⚠️ Erreur sauvegarde JWT dans Keychain: \(error)")
             }
             
-            // Si tu veux garder "stayConnected" pour autre chose (par ex. une préférence utilisateur),
-            // tu peux encore le stocker dans UserDefaults ici si nécessaire.
+            // Initialize conversation socket
+            if let userId = JWTHelper.extractUserId(from: response.access_token) {
+                ConversationSocketManager.shared.connect(token: response.access_token, userId: userId)
+            }
+            
+            // Request notification permission after successful login
+            LocalNotificationManager.shared.requestPermission { granted in
+                if granted {
+                    print("✅ Notification permission granted")
+                } else {
+                    print("⚠️ Notification permission denied - notifications won't appear")
+                }
+            }
             
             // Marquer l'utilisateur comme connecté
             isLoggedIn = true
@@ -46,8 +57,13 @@ final class LoginViewModel: ObservableObject {
     
     // MARK: - Vérifier si token existe déjà
     func checkIfAlreadyLoggedIn() {
-        if let _ = try? KeychainManager.shared.getJWT() {
+        if let token = try? KeychainManager.shared.getJWT() {
             isLoggedIn = true
+            
+            // Initialize conversation socket if already logged in
+            if let userId = JWTHelper.extractUserId(from: token) {
+                ConversationSocketManager.shared.connect(token: token, userId: userId)
+            }
         }
     }
 }

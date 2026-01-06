@@ -221,21 +221,26 @@ struct ProfileView: View {
                 }
                 .disabled(viewModel.isFollowLoading)
             }
-
-            Button {
-                // future: share or message
-            } label: {
-                HStack {
-                    Image(systemName: isCurrentUser ? "square.and.arrow.up" : "message")
-                    Text(isCurrentUser ? "Partager" : "Message")
+            if !isCurrentUser, let otherUserId = userId {
+                NavigationLink(destination: PrivateChatView(recipientId: otherUserId)) {
+                    HStack {
+                        Image(systemName: "message.fill")
+                        Text("Message")
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 16)
+                    .background(
+                        LinearGradient(
+                            gradient: Gradient(colors: [AppColors.GreenAccent.opacity(0.3), AppColors.GreenDark.opacity(0.3)]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .foregroundColor(AppColors.GreenAccent)
+                    .cornerRadius(14)
+                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(AppColors.GreenAccent.opacity(0.5), lineWidth: 1))
                 }
-                .font(.subheadline.weight(.semibold))
-                .padding(.vertical, 10)
-                .padding(.horizontal, 16)
-                .background(AppColors.CardGlass)
-                .foregroundColor(AppColors.TextPrimary)
-                .cornerRadius(14)
-                .overlay(RoundedRectangle(cornerRadius: 14).stroke(AppColors.DividerColor, lineWidth: 0.8))
             }
         }
     }
@@ -244,9 +249,6 @@ struct ProfileView: View {
         HStack(spacing: 10) {
             segmentButton(title: "Sorties", isSelected: viewModel.selectedSegment == .mesSorties) {
                 viewModel.selectedSegment = .mesSorties
-            }
-            segmentButton(title: "Créées", isSelected: viewModel.selectedSegment == .creees) {
-                viewModel.selectedSegment = .creees
             }
             segmentButton(title: "Publications", isSelected: viewModel.selectedSegment == .publications) {
                 viewModel.selectedSegment = .publications
@@ -290,25 +292,13 @@ struct ProfileView: View {
                         .buttonStyle(.plain)
                     }
                 }
-            case .creees:
-                if viewModel.createdRides.isEmpty {
-                    emptySection(text: "Aucune sortie créée")
-                } else {
-                    ForEach(viewModel.createdRides, id: \.ride.id) { item in
-                        NavigationLink(destination: SortieDetailView(ride: item.ride, creator: item.creator)) {
-                            RideCardView(item: item)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
             case .publications:
                 if viewModel.publications.isEmpty {
-                    emptySection(text: "Aucune publication")
+                    emptySection(text: "Aucune publication trouvée")
                 } else {
-                    ForEach(viewModel.publications) { pub in
+                    ForEach(viewModel.publications, id: \.id) { publication in
                         PostCardView(
-                            publication: pub,
+                            publication: publication,
                             initialIsLiked: false,
                             onLikeClick: {},
                             onCommentClick: {},
@@ -317,6 +307,8 @@ struct ProfileView: View {
                         )
                     }
                 }
+            @unknown default:
+                emptySection(text: "Unknown section")
             }
         }
     }

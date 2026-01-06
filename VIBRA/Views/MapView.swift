@@ -10,9 +10,13 @@ import CoreLocation
 struct MapView: View {
     @StateObject private var viewModel = MapViewModel()
     @StateObject private var rideLocationManager = RideLocationManager()
+    @Environment(\.dismiss) private var dismiss
     
     @State private var userTrackingMode: MapUserTrackingMode = .follow
     @State private var showFilters = false
+    
+    // Only show back button when pushed via NavigationLink (not when in TabBar)
+    var showBackButton: Bool = false
     
     var body: some View {
         NavigationStack {
@@ -61,6 +65,22 @@ struct MapView: View {
     private var topBar: some View {
         VStack(spacing: 12) {
             HStack {
+                // Back Button - only show when pushed via NavigationLink
+                if showBackButton {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Circle()
+                            .fill(AppColors.CardDark)
+                            .frame(width: 40, height: 40)
+                            .overlay(
+                                Image(systemName: "chevron.left")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(AppColors.GreenAccent)
+                            )
+                    }
+                }
+                
                 Text("Carte des sorties")
                     .font(.title2.bold())
                     .foregroundColor(AppColors.TextPrimary)

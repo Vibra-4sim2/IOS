@@ -1,0 +1,567 @@
+# Rapport de Soutenance – Application iOS VIBRA
+
+## 1️⃣ Présentation générale de l’application iOS
+
+### Objectif de l’application
+L’application VIBRA est une application mobile native iOS permettant aux utilisateurs d’organiser, rejoindre et gérer des sorties (balades, randonnées, événements communautaires), d’échanger des messages privés ou de groupe, de recevoir des notifications, et d’interagir avec une communauté. Elle vise à faciliter la création de liens sociaux autour d’activités partagées.
+
+### Rôle du front iOS par rapport au back-end
+L’application iOS constitue l’interface utilisateur (front-end) : elle permet à l’utilisateur d’interagir avec les fonctionnalités offertes par le back-end (serveur). Le front-end gère l’affichage, la navigation, la saisie utilisateur, et la synchronisation des données avec le back-end via des API REST.
+
+### Type d’application
+- Application mobile native iOS
+- Développée en Swift
+- Utilise principalement le framework SwiftUI pour l’interface utilisateur
+
+### Frameworks principaux utilisés
+- **SwiftUI** : Framework Apple pour construire des interfaces utilisateur déclaratives et réactives.
+- **Combine** : Pour la gestion des données asynchrones et la synchronisation UI/données.
+- **Foundation** : Pour la gestion des données, du réseau, etc.
+
+#### Qu’est-ce qu’une application iOS ?
+Une application iOS est un programme conçu pour fonctionner sur les appareils Apple (iPhone, iPad). Elle est développée en Swift (ou Objective-C) et utilise des frameworks Apple (UIKit, SwiftUI) pour l’interface et la gestion du cycle de vie. Elle interagit avec le système d’exploitation pour afficher des écrans, gérer les interactions, accéder au réseau, etc.
+
+---
+
+## 2️⃣ Architecture iOS utilisée (PARTIE CRITIQUE)
+
+### Architecture choisie : MVVM (Model-View-ViewModel)
+
+#### Pourquoi ce choix ?
+- **Séparation claire des responsabilités** : UI, logique métier, accès aux données sont séparés.
+- **Facilite la maintenance** : chaque couche a un rôle précis, le code est plus lisible et testable.
+- **Adapté à SwiftUI** : MVVM permet de lier facilement les données à l’UI grâce à l’observation.
+
+#### Problèmes résolus
+- **Éviter le code spaghetti** : la logique métier n’est pas mélangée à l’UI.
+- **Réutilisabilité** : les ViewModels peuvent être testés et réutilisés indépendamment de l’UI.
+
+#### Avantages pour la maintenance et l’évolution
+- **Ajout de fonctionnalités facilité**
+- **Correction de bugs localisée**
+- **Tests unitaires sur la logique métier**
+
+### Schéma de circulation des données
+
+```
+UI (View) → ViewModel → Service → API → Back-End
+```
+- **UI (View)** : Affiche les données, reçoit les actions utilisateur.
+- **ViewModel** : Gère l’état, la logique métier, expose les données à la vue.
+- **Service** : Gère les appels réseau, la persistance locale.
+- **API** : Interface de communication avec le back-end.
+- **Back-End** : Source des données distantes.
+
+#### Rôle de chaque couche
+- **View** : Affichage, interactions utilisateur.
+- **ViewModel** : Prépare les données pour la vue, gère l’état, observe les changements.
+- **Service** : Effectue les requêtes réseau, traite les réponses, gère les erreurs.
+
+---
+
+## 3️⃣ Concepts fondamentaux iOS (EXPLIQUER COMME À UN DÉBUTANT)
+
+### ViewController / View
+- **ViewController** (UIKit) : Contrôleur qui gère un écran, reçoit les événements, met à jour la vue.
+- **View** (SwiftUI) : Structure déclarative qui décrit l’interface utilisateur. Chaque écran est une View.
+
+### Storyboard / SwiftUI View
+- **Storyboard** : Outil graphique pour construire l’UI (non utilisé ici).
+- **SwiftUI View** : Code Swift qui décrit l’UI de façon déclarative et réactive.
+
+### Navigation (NavigationController / TabBar)
+- **NavigationStack** : Permet de naviguer entre des écrans (pousser/poper des vues).
+- **TabBar** : Barre d’onglets en bas de l’écran pour accéder rapidement aux sections principales.
+
+### Cycle de vie d’une vue
+- **onAppear** : Appelé quand la vue apparaît à l’écran.
+- **onDisappear** : Appelé quand la vue disparaît.
+
+### Delegation / Closure / Observable
+- **Delegation** : Permet à une classe de déléguer une action à une autre (peu utilisé en SwiftUI).
+- **Closure** : Bloc de code passé en paramètre pour exécuter une action (ex : callbacks).
+- **ObservableObject / @Published** : Permet de notifier la vue quand les données changent (pattern d’observation).
+
+### State management
+- **@State** : Variable d’état locale à la vue.
+- **@StateObject / @ObservedObject** : Pour observer un ViewModel ou un objet partagé.
+- **@EnvironmentObject** : Pour partager un ViewModel entre plusieurs vues.
+
+---
+
+## 4️⃣ Classes & relations (EXPLICATION, PAS LISTE)
+
+### 🔹 TabBarView
+1. **Rôle** : Vue principale qui gère la navigation par onglets (Home, Messages, Community, Profile).
+2. **Responsabilité** : Afficher la barre d’onglets, gérer la navigation, afficher le bouton flottant de création, gérer le menu utilisateur.
+3. **Données** : Onglet sélectionné, état du menu, notifications, état de connexion.
+4. **Relations** : Utilise plusieurs ViewModels (NotificationViewModel, RatingPromptViewModel), affiche d’autres vues (HomeView, MessagesHubView, etc.).
+5. **Pourquoi** : Centralise la navigation principale de l’application.
+
+### 🔹 HomeView
+- **Rôle** : Afficher le fil d’actualité ou les suggestions de sorties.
+- **Responsabilité** : Présenter les sorties à venir, suggestions personnalisées.
+- **Données** : Sorties récupérées via API.
+- **Relations** : Utilise un ViewModel pour charger les données.
+
+### 🔹 MessagesHubView
+- **Rôle** : Afficher la liste des conversations/messages.
+- **Responsabilité** : Lister les conversations, permettre d’ouvrir une discussion.
+- **Données** : Conversations récupérées via API.
+- **Relations** : Utilise ConversationViewModel, ChatService.
+
+### 🔹 FeedView
+- **Rôle** : Afficher la communauté, les publications.
+- **Responsabilité** : Lister les posts, permettre d’en créer.
+- **Données** : Publications récupérées via API.
+- **Relations** : Utilise PublicationService, PublicationViewModel.
+
+### 🔹 ProfileView
+- **Rôle** : Afficher le profil utilisateur.
+- **Responsabilité** : Montrer les infos personnelles, les paramètres.
+- **Données** : Utilisateur courant, récupéré via API ou local.
+- **Relations** : Utilise UserViewModel, AuthService.
+
+### 🔹 NotificationViewModel
+- **Rôle** : Gérer l’état des notifications.
+- **Responsabilité** : Savoir s’il y a des notifications non lues.
+- **Données** : Notifications récupérées via API.
+- **Relations** : Utilisé par TabBarView.
+
+### 🔹 RatingPromptViewModel
+- **Rôle** : Gérer l’affichage du prompt de notation.
+- **Responsabilité** : Déterminer si l’utilisateur doit noter une sortie.
+- **Données** : Sorties éligibles à la notation.
+- **Relations** : Utilisé par TabBarView.
+
+### 🔹 Services (ex : AuthService, ChatService, etc.)
+- **Rôle** : Gérer les appels réseau et la logique métier associée.
+- **Responsabilité** : Envoyer les requêtes HTTP, parser les réponses, gérer les erreurs.
+- **Données** : Données reçues du back-end.
+- **Relations** : Appelés par les ViewModels.
+
+---
+
+## 5️⃣ UI & Affichage (PARTIE JURY)
+
+### Construction des écrans
+- Chaque écran est une SwiftUI View.
+- Les layouts sont gérés par des stacks (VStack, HStack, ZStack) et des modifiers SwiftUI.
+- Les composants UI sont : boutons, listes, images, champs de texte, etc.
+
+### Navigation
+- NavigationStack pour naviguer entre les écrans.
+- TabView pour la navigation principale par onglets.
+- NavigationLink pour accéder à un écran secondaire.
+
+### Pour chaque écran important :
+
+#### 1. HomeView
+- **Objectif** : Accueil, suggestions de sorties.
+- **Données** : Sorties à venir, suggestions personnalisées.
+- **Origine** : API via HomeService.
+- **Mise à jour** : Automatique via ViewModel et Combine.
+
+#### 2. MessagesHubView
+- **Objectif** : Liste des conversations/messages.
+- **Données** : Conversations, messages.
+- **Origine** : API via ChatService.
+- **Mise à jour** : Automatique via ViewModel.
+
+#### 3. FeedView
+- **Objectif** : Communauté, publications.
+- **Données** : Posts, commentaires.
+- **Origine** : API via PublicationService.
+- **Mise à jour** : Automatique via ViewModel.
+
+#### 4. ProfileView
+- **Objectif** : Profil utilisateur.
+- **Données** : Infos utilisateur, paramètres.
+- **Origine** : API via AuthService.
+- **Mise à jour** : Automatique via ViewModel.
+
+#### 5. NotificationsView
+- **Objectif** : Afficher les notifications.
+- **Données** : Notifications.
+- **Origine** : API via NotificationService.
+- **Mise à jour** : Automatique via ViewModel.
+
+#### 6. CreateSortieView
+- **Objectif** : Créer une nouvelle sortie.
+- **Données** : Formulaire de création, données saisies par l’utilisateur.
+- **Origine** : Local, puis envoyées à l’API.
+- **Mise à jour** : Après validation, retour à l’accueil.
+
+#### 7. MyRidesHomeView
+- **Objectif** : Liste des sorties de l’utilisateur.
+- **Données** : Sorties créées ou rejointes.
+- **Origine** : API via RideService.
+- **Mise à jour** : Automatique via ViewModel.
+
+#### 8. SavedRidesView
+- **Objectif** : Sorties sauvegardées.
+- **Données** : Sorties marquées comme favorites.
+- **Origine** : Local ou API.
+- **Mise à jour** : Automatique via ViewModel.
+
+#### 9. SortieRatingPromptView
+- **Objectif** : Noter une sortie après participation.
+- **Données** : Sorties à noter.
+- **Origine** : API via RatingService.
+- **Mise à jour** : Après notation, prompt disparaît.
+
+#### 10. MapView
+- **Objectif** : Afficher la carte des sorties.
+- **Données** : Localisation, sorties géolocalisées.
+- **Origine** : API ou local.
+- **Mise à jour** : Automatique.
+
+#### 11. LoginView
+- **Objectif** : Authentification utilisateur.
+- **Données** : Email, mot de passe.
+- **Origine** : Saisie utilisateur, vérifiée via AuthService.
+- **Mise à jour** : Après succès, accès à l’app.
+
+#### 12. Écrans techniques
+- **Splash/Loading** : Affiché au lancement, attente de chargement.
+- **Erreur** : Affiché en cas d’échec réseau ou autre.
+- **Onboarding** : Présentation de l’app (si existant).
+
+---
+
+## 6️⃣ Consommation des API (TRÈS IMPORTANT)
+
+### Étapes détaillées :
+1. **Appel d’une API REST** : Le ViewModel appelle un Service (ex : AuthService) pour effectuer une requête HTTP.
+2. **Classe responsable** : Les classes dans le dossier Services (ex : AuthService, ChatService).
+3. **Construction de la requête** : Création d’un objet URLRequest avec l’URL, la méthode (GET, POST), les headers (dont le token d’authentification).
+4. **Gestion des réponses** : Le Service reçoit la réponse, vérifie le code HTTP, parse le JSON.
+5. **Gestion des erreurs** : Si erreur réseau ou code HTTP inattendu, le Service renvoie une erreur au ViewModel.
+6. **Parsing JSON** : Utilisation de Codable pour transformer le JSON en objets Swift.
+7. **Mise à jour de l’UI** : Le ViewModel publie les nouvelles données, la vue se met à jour automatiquement.
+
+---
+
+## 7️⃣ Gestion de l’état & données
+- **Stockage temporaire** : Les ViewModels stockent les données en mémoire.
+- **Synchronisation UI/données** : Grâce à @Published et ObservableObject, l’UI se met à jour dès que les données changent.
+- **Gestion du loading/erreur** : Les ViewModels exposent des états (isLoading, error) pour afficher des écrans de chargement ou d’erreur.
+- **Gestion du token** : Le token d’authentification est stocké de façon sécurisée dans le Keychain.
+
+---
+
+## 8️⃣ Sécurité côté iOS
+- **Stockage sécurisé** : Utilisation du Keychain pour stocker le token JWT.
+- **Protection des données sensibles** : Jamais stockées en clair, accès restreint.
+- **Bonnes pratiques** : Suppression du token à la déconnexion, pas de logs de données sensibles.
+
+---
+
+## 9️⃣ Flux utilisateur COMPLETS
+
+### 1. Lancement de l’app
+- Affichage du splash/loading
+- Vérification de l’authentification
+- Redirection vers LoginView ou TabBarView
+
+### 2. Connexion utilisateur
+- Saisie email/mot de passe
+- Appel AuthService
+- Stockage du token dans le Keychain
+- Accès à l’app
+
+### 3. Navigation vers une fonctionnalité
+- Utilisation de la TabBar pour changer de section
+- NavigationStack pour accéder à des écrans secondaires
+
+### 4. Affichage des données
+- ViewModel charge les données via Service
+- Données affichées dans la vue
+- Mise à jour automatique si changement
+
+### 5. Interaction utilisateur → réponse UI
+- Appui sur un bouton (ex : créer une sortie)
+- Affichage d’un formulaire
+- Validation, envoi à l’API
+- Retour à l’accueil, affichage de la nouvelle sortie
+
+---
+
+## 🔟 Synthèse pour la validation finale
+
+### ✅ Résumé simple de l’architecture
+- Architecture MVVM : séparation claire UI, logique métier, accès aux données.
+- Données : API REST, parsing JSON, synchronisation UI automatique.
+
+### ✅ Concepts iOS clés à mémoriser
+- SwiftUI View, ViewModel, Service, ObservableObject, @Published, Keychain.
+
+### ✅ Questions probables du jury + réponses
+- **Pourquoi MVVM ?** → Séparation, testabilité, maintenance.
+- **Comment l’UI se met à jour ?** → Observation via @Published.
+- **Comment sont gérées les erreurs ?** → États d’erreur dans les ViewModels.
+- **Comment est stocké le token ?** → Keychain sécurisé.
+
+### ✅ Points forts techniques
+- Architecture claire et moderne
+- Sécurité (Keychain)
+- UI réactive et fluide
+- Code maintenable et évolutif
+
+### ✅ Limites et améliorations possibles
+- Ajouter des tests unitaires
+- Améliorer la gestion offline
+- Optimiser les performances réseau
+
+### ✅ Pitch oral de 2 minutes
+« VIBRA est une application iOS native, développée en Swift avec SwiftUI, qui permet d’organiser et de rejoindre des sorties communautaires. L’architecture MVVM garantit une séparation claire entre l’interface, la logique métier et l’accès aux données, ce qui facilite la maintenance et l’évolution. L’application consomme des API REST sécurisées, gère l’authentification via le Keychain, et propose une expérience utilisateur fluide grâce à la synchronisation automatique des données. Chaque écran a un rôle précis, de l’accueil à la messagerie, en passant par la gestion des sorties et des notifications. Les choix techniques assurent robustesse, sécurité et évolutivité, tout en offrant une interface moderne et intuitive. »
+
+---
+
+# Liste détaillée des écrans de l’application
+
+## 1. HomeView
+1. **Objectif** : Accueil, suggestions de sorties.
+2. **Fonctionnalité métier** : Découverte de sorties, suggestions personnalisées.
+3. **Données affichées** : Liste de sorties, recommandations.
+4. **Origine des données** : API via HomeService.
+5. **Classes impliquées** : HomeView, HomeViewModel, HomeService.
+6. **Flux utilisateur** : Lancement → affichage suggestions → sélection d’une sortie.
+7. **Interactions** : Sélectionner une sortie, accéder au détail.
+8. **Cas d’erreur** : Erreur réseau, affichage d’un message.
+9. **À l’oral** : « L’écran d’accueil propose des suggestions personnalisées de sorties, récupérées dynamiquement via l’API. »
+
+### A️⃣ Déclencheur technique
+- L’affichage de la liste est déclenché par l’événement `.task` de SwiftUI dans le body de HomeView. Cet événement exécute `await viewModel.load()` dès que la vue apparaît à l’écran.
+- L’utilisateur peut aussi déclencher un rechargement via des filtres ou un changement d’onglet (modification de propriétés observées).
+
+### B️⃣ Flux code détaillé
+1. L’événement `.task` appelle la fonction asynchrone `load()` du HomeViewModel.
+2. `HomeViewModel` (annoté `@StateObject` dans la vue) exécute `load()`, qui appelle le service réseau `HomeService.shared.fetchRidesWithCreators()`.
+3. Lorsque la réponse arrive, la propriété `@Published var items: [RideWithCreator]` du ViewModel est modifiée.
+4. Grâce à l’annotation `@Published`, SwiftUI observe automatiquement les changements de cette propriété via Combine.
+5. Quand `items` change, SwiftUI déclenche un nouveau calcul du body de la vue (reconstruction de la vue), ce qui met à jour l’affichage de la liste.
+
+### C️⃣ Rôle précis de SwiftUI
+- La View est une `struct` car SwiftUI utilise la valeur et la composition pour optimiser le rendu et permettre la reconstruction rapide de l’UI.
+- Le body est recalculé à chaque changement d’état observé (ici, `items`, `isLoading`, `errorMessage`).
+- SwiftUI optimise le rendu en ne réaffichant que les sous-vues dont les données ont changé (diffing algorithm).
+
+### D️⃣ Combine (utilisé en interne)
+- Le property wrapper `@Published` crée un Publisher pour chaque propriété annotée.
+- SwiftUI souscrit automatiquement à ces Publishers via l’observation de l’ObservableObject.
+- Les modifications sont propagées sur le thread principal (`@MainActor`).
+- Les erreurs réseau sont capturées dans `errorMessage` (également `@Published`), ce qui permet d’afficher dynamiquement un état d’erreur.
+
+### E️⃣ Justification technique
+- Cette implémentation respecte MVVM : la vue ne connaît que le ViewModel, qui encapsule toute la logique métier et l’accès aux données.
+- Le ViewModel expose uniquement des propriétés observables, la vue ne fait que les consommer.
+- Un mauvais design consisterait à faire les appels réseau directement dans la vue, ce qui rendrait le code non testable, difficile à maintenir et fragile face aux évolutions.
+
+### F️⃣ Phrase ORALE À DIRE AU JURY
+« Sur HomeView, chaque chargement de données est déclenché par l’événement .task, qui appelle une fonction asynchrone du ViewModel. Dès que la propriété @Published items change, SwiftUI le détecte via Combine et reconstruit automatiquement la vue, garantissant une synchronisation parfaite entre l’état du modèle et l’interface. »
+
+## 2. MessagesHubView
+1. **Objectif** : Liste des conversations/messages.
+2. **Fonctionnalité métier** : Messagerie privée/groupe.
+3. **Données affichées** : Conversations, derniers messages.
+4. **Origine des données** : API via ChatService.
+5. **Classes impliquées** : MessagesHubView, ConversationViewModel, ChatService.
+6. **Flux utilisateur** : Accès → sélection d’une conversation → affichage des messages.
+7. **Interactions** : Ouvrir une conversation, envoyer un message.
+8. **Cas d’erreur** : Erreur réseau, affichage d’un message.
+9. **À l’oral** : « L’onglet Messages centralise toutes les conversations, avec navigation vers le détail. »
+
+### A️⃣ Déclencheur technique
+- Le chargement des conversations est déclenché par l’événement `.onAppear` ou `.task` dans la vue ConversationListView (appelée par MessagesHubView). L’utilisateur peut aussi déclencher un rafraîchissement manuel (pull-to-refresh ou changement d’onglet).
+
+### B️⃣ Flux code détaillé
+1. L’événement `.onAppear` ou `.task` appelle la fonction asynchrone `loadConversations()` du ConversationViewModel.
+2. Le ViewModel (annoté `@StateObject` ou `@ObservedObject`) exécute `loadConversations()`, qui appelle le service réseau `ChatService` pour récupérer les conversations.
+3. À la réception, la propriété `@Published var conversations: [Conversation]` du ViewModel est modifiée.
+4. Grâce à `@Published`, SwiftUI observe ce changement via Combine.
+5. Quand `conversations` change, SwiftUI recalcule le body de la vue, mettant à jour la liste affichée.
+
+### C️⃣ Rôle précis de SwiftUI
+- La vue est une `struct` pour permettre la composition et la reconstruction rapide.
+- Le body est recalculé à chaque changement d’état observé (ici, `conversations`, `isLoading`, `errorMessage`).
+- SwiftUI optimise le rendu en ne mettant à jour que les sous-vues concernées.
+
+### D️⃣ Combine (utilisé en interne)
+- `@Published` crée un Publisher pour chaque propriété annotée.
+- SwiftUI souscrit automatiquement à ces Publishers.
+- Les modifications sont propagées sur le thread principal (`@MainActor`).
+- Les erreurs réseau sont capturées dans `errorMessage` (également `@Published`).
+
+### E️⃣ Justification technique
+- Cette implémentation respecte MVVM : la vue ne gère que l’affichage, le ViewModel encapsule la logique métier et l’accès aux données.
+- Un mauvais design consisterait à faire les appels réseau dans la vue, rendant le code non testable et difficile à maintenir.
+
+### F️⃣ Phrase ORALE À DIRE AU JURY
+« Sur MessagesHubView, chaque chargement de conversations est déclenché par .onAppear ou .task, qui appelle une fonction du ViewModel. Dès que la propriété @Published conversations change, SwiftUI le détecte via Combine et reconstruit la vue, assurant la cohérence entre l’état du modèle et l’interface. »
+
+## 3. FeedView
+1. **Objectif** : Communauté, publications.
+2. **Fonctionnalité métier** : Partage de posts, interaction communautaire.
+3. **Données affichées** : Liste de publications, commentaires.
+4. **Origine des données** : API via PublicationService.
+5. **Classes impliquées** : FeedView, PublicationViewModel, PublicationService.
+6. **Flux utilisateur** : Accès → lecture des posts → création d’un post.
+7. **Interactions** : Créer un post, commenter, liker.
+8. **Cas d’erreur** : Erreur réseau, affichage d’un message.
+9. **À l’oral** : « L’onglet Communauté permet de partager et consulter des publications. »
+
+## 4. ProfileView
+1. **Objectif** : Profil utilisateur.
+2. **Fonctionnalité métier** : Gestion du compte, paramètres.
+3. **Données affichées** : Infos utilisateur, préférences.
+4. **Origine des données** : API via AuthService.
+5. **Classes impliquées** : ProfileView, UserViewModel, AuthService.
+6. **Flux utilisateur** : Accès → modification des infos → sauvegarde.
+7. **Interactions** : Modifier profil, accéder aux paramètres.
+8. **Cas d’erreur** : Erreur réseau, affichage d’un message.
+9. **À l’oral** : « L’onglet Profil permet de consulter et modifier ses informations personnelles. »
+
+## 5. NotificationsView
+1. **Objectif** : Afficher les notifications.
+2. **Fonctionnalité métier** : Suivi des événements importants.
+3. **Données affichées** : Liste de notifications.
+4. **Origine des données** : API via NotificationService.
+5. **Classes impliquées** : NotificationsView, NotificationViewModel, NotificationService.
+6. **Flux utilisateur** : Accès → lecture des notifications.
+7. **Interactions** : Ouvrir une notification, marquer comme lue.
+8. **Cas d’erreur** : Erreur réseau, affichage d’un message.
+9. **À l’oral** : « Les notifications informent l’utilisateur des nouveaux messages, invitations, etc. »
+
+## 6. CreateSortieView
+1. **Objectif** : Créer une nouvelle sortie.
+2. **Fonctionnalité métier** : Organisation d’événements.
+3. **Données affichées** : Formulaire de création.
+4. **Origine des données** : Saisie utilisateur, envoi à l’API.
+5. **Classes impliquées** : CreateSortieView, SortieService.
+6. **Flux utilisateur** : Accès → saisie → validation → création.
+7. **Interactions** : Remplir le formulaire, valider.
+8. **Cas d’erreur** : Erreur de validation, affichage d’un message.
+9. **À l’oral** : « Le bouton flottant permet de créer une sortie en quelques étapes. »
+
+## 7. MyRidesHomeView
+1. **Objectif** : Liste des sorties de l’utilisateur.
+2. **Fonctionnalité métier** : Suivi des participations.
+3. **Données affichées** : Sorties créées ou rejointes.
+4. **Origine des données** : API via RideService.
+5. **Classes impliquées** : MyRidesHomeView, RideService.
+6. **Flux utilisateur** : Accès → consultation des sorties.
+7. **Interactions** : Sélectionner une sortie, voir le détail.
+8. **Cas d’erreur** : Erreur réseau, affichage d’un message.
+9. **À l’oral** : « L’utilisateur retrouve ici toutes ses sorties passées et à venir. »
+
+## 8. SavedRidesView
+1. **Objectif** : Sorties sauvegardées.
+2. **Fonctionnalité métier** : Favoris, bookmarking.
+3. **Données affichées** : Liste de sorties sauvegardées.
+4. **Origine des données** : Local ou API.
+5. **Classes impliquées** : SavedRidesView, SavedRidesManager, HomeService.
+6. **Flux utilisateur** : Accès → consultation des favoris.
+7. **Interactions** : Retirer/ajouter un favori.
+8. **Cas d’erreur** : Erreur de synchronisation.
+9. **À l’oral** : « Les sorties favorites sont accessibles rapidement ici. »
+
+### A️⃣ Déclencheur technique
+- Le chargement des favoris est déclenché par `.onAppear` ou `.task` dans SavedRidesView. L’utilisateur peut aussi déclencher un ajout/retrait de favori via un bouton.
+
+### B️⃣ Flux code détaillé
+1. L’événement `.onAppear` ou `.task` appelle la fonction asynchrone `loadSavedRides()` du ViewModel ou du SavedRidesManager.
+2. Le ViewModel (annoté `@StateObject` ou `@ObservedObject`) exécute `loadSavedRides()`, qui récupère les favoris localement ou via HomeService.
+3. À la réception, la propriété `@Published var savedRides: [RideWithCreator]` du ViewModel est modifiée.
+4. Grâce à `@Published`, SwiftUI observe ce changement via Combine.
+5. Quand `savedRides` change, SwiftUI recalcule le body de la vue, mettant à jour la liste affichée.
+
+### C️⃣ Rôle précis de SwiftUI
+- La vue est une `struct` pour permettre la composition et la reconstruction rapide.
+- Le body est recalculé à chaque changement d’état observé (ici, `savedRides`, `isLoading`, `errorMessage`).
+- SwiftUI optimise le rendu en ne mettant à jour que les sous-vues concernées.
+
+### D️⃣ Combine (utilisé en interne)
+- `@Published` crée un Publisher pour chaque propriété annotée.
+- SwiftUI souscrit automatiquement à ces Publishers.
+- Les modifications sont propagées sur le thread principal (`@MainActor`).
+- Les erreurs réseau ou de synchronisation sont capturées dans `errorMessage` (également `@Published`).
+
+### E️⃣ Justification technique
+- Cette implémentation respecte MVVM : la vue ne gère que l’affichage, le ViewModel encapsule la logique métier et l’accès aux données.
+- Un mauvais design consisterait à faire les accès favoris dans la vue, rendant le code non testable et difficile à maintenir.
+
+### F️⃣ Phrase ORALE À DIRE AU JURY
+« Sur SavedRidesView, chaque modification des favoris est propagée via @Published, ce qui permet à SwiftUI de reconstruire la vue et d’assurer la cohérence entre l’état local et l’interface. »
+
+## 9. SortieRatingPromptView
+1. **Objectif** : Noter une sortie après participation.
+2. **Fonctionnalité métier** : Feedback utilisateur.
+3. **Données affichées** : Sorties à noter.
+4. **Origine des données** : API via RatingService.
+5. **Classes impliquées** : SortieRatingPromptView, RatingPromptViewModel, RatingService.
+6. **Flux utilisateur** : Prompt affiché → notation → envoi à l’API.
+7. **Interactions** : Noter, ignorer.
+8. **Cas d’erreur** : Erreur d’envoi, affichage d’un message.
+9. **À l’oral** : « Après une sortie, l’utilisateur est invité à donner son avis. »
+
+## 10. MapView
+1. **Objectif** : Afficher la carte des sorties.
+2. **Fonctionnalité métier** : Visualisation géographique.
+3. **Données affichées** : Carte, sorties géolocalisées.
+4. **Origine des données** : API ou local.
+5. **Classes impliquées** : MapView, MapViewModel, HomeService.
+6. **Flux utilisateur** : Accès → navigation sur la carte.
+7. **Interactions** : Sélectionner une sortie sur la carte.
+8. **Cas d’erreur** : Erreur de chargement carte.
+9. **À l’oral** : « La carte permet de visualiser les sorties autour de soi. »
+
+### A️⃣ Déclencheur technique
+- Le chargement des données de la carte est déclenché par `.task` ou `.onAppear` dans MapView. L’utilisateur peut aussi déclencher un rafraîchissement via des filtres ou un recentrage.
+
+### B️⃣ Flux code détaillé
+1. L’événement `.task` appelle la fonction asynchrone `load()` du MapViewModel.
+2. Le ViewModel (annoté `@StateObject`) exécute `load()`, qui appelle HomeService pour récupérer les sorties géolocalisées.
+3. À la réception, la propriété `@Published var items: [RideWithCreator]` du ViewModel est modifiée.
+4. Grâce à `@Published`, SwiftUI observe ce changement via Combine.
+5. Quand `items` change, SwiftUI recalcule le body de la vue, mettant à jour la carte et les annotations.
+
+### C️⃣ Rôle précis de SwiftUI
+- La vue est une `struct` pour permettre la composition et la reconstruction rapide.
+- Le body est recalculé à chaque changement d’état observé (ici, `items`, `isLoading`, `errorMessage`).
+- SwiftUI optimise le rendu en ne mettant à jour que les sous-vues concernées.
+
+### D️⃣ Combine (utilisé en interne)
+- `@Published` crée un Publisher pour chaque propriété annotée.
+- SwiftUI souscrit automatiquement à ces Publishers.
+- Les modifications sont propagées sur le thread principal (`@MainActor`).
+- Les erreurs réseau sont capturées dans `errorMessage` (également `@Published`).
+
+### E️⃣ Justification technique
+- Cette implémentation respecte MVVM : la vue ne gère que l’affichage, le ViewModel encapsule la logique métier et l’accès aux données.
+- Un mauvais design consisterait à faire les appels réseau dans la vue, rendant le code non testable et difficile à maintenir.
+
+### F️⃣ Phrase ORALE À DIRE AU JURY
+« Sur MapView, chaque chargement de données est déclenché par .task, qui appelle une fonction du ViewModel. Dès que la propriété @Published items change, SwiftUI le détecte via Combine et reconstruit la carte, assurant la cohérence entre l’état du modèle et l’interface. »
+
+## 11. LoginView
+1. **Objectif** : Authentification utilisateur.
+2. **Fonctionnalité métier** : Sécurité, accès restreint.
+3. **Données affichées** : Champs email/mot de passe.
+4. **Origine des données** : Saisie utilisateur.
+5. **Classes impliquées** : LoginView, AuthService.
+6. **Flux utilisateur** : Saisie → validation → accès à l’app.
+7. **Interactions** : Saisir, valider, mot de passe oublié.
+8. **Cas d’erreur** : Mauvais identifiants, affichage d’un message.
+9. **À l’oral** : « L’écran de connexion sécurise l’accès à l’application. »
+
+## 12. Écrans techniques
+- **Splash/Loading** : Affiché au lancement, attente de chargement.
+- **Erreur** : Affiché en cas d’échec réseau ou autre.
+- **Onboarding** : Présentation de l’app (si existant).
+
+---
+
+# Fin du rapport
+
+Ce rapport est prêt à être utilisé pour la soutenance et la validation finale du projet iOS VIBRA.

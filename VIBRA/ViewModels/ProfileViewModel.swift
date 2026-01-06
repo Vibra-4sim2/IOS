@@ -16,7 +16,6 @@ final class ProfileViewModel: ObservableObject {
     // MARK: - Segments
     enum Segment {
         case mesSorties
-        case creees
         case publications
     }
 

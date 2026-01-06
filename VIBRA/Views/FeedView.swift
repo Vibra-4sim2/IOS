@@ -27,21 +27,21 @@ struct FeedView: View {
     @State private var isShowingAddPublication = false
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                BackgroundDark.ignoresSafeArea()
-
-                content
-                    .padding(.top, 8)
-            }
-            .refreshable {
-                viewModel.refreshFeed()
-            }
-            .navigationBarHidden(true)
-            // Navigation vers AddPublicationView
-            .navigationDestination(isPresented: $isShowingAddPublication) {
-                AddPublicationView()
-            }
+        ZStack {
+            BackgroundDark
+                .ignoresSafeArea()
+            
+            content
+        }
+        .refreshable {
+            viewModel.refreshFeed()
+        }
+        // Navigation vers AddPublicationView en fullScreenCover
+        .fullScreenCover(isPresented: $isShowingAddPublication) {
+            AddPublicationView(onDismiss: {
+                isShowingAddPublication = false
+                viewModel.refreshFeed() // Rafraîchir le feed après publication
+            })
         }
     }
 
@@ -67,7 +67,7 @@ struct FeedView: View {
     }
 
     private var feedList: some View {
-        ScrollView {
+        ScrollView(showsIndicators: false) {
             VStack(spacing: 20) {
 
                 // Header : clique sur "What's on your mind?" → ouvre AddPublicationView
@@ -75,7 +75,6 @@ struct FeedView: View {
                     onCreatePost?()
                     isShowingAddPublication = true
                 })
-                .padding(.top, 8)
 
                 ForEach(viewModel.publications) { publication in
                     PostCardView(
@@ -88,10 +87,12 @@ struct FeedView: View {
                     )
                 }
 
-                Color.clear.frame(height: 40)
+                Color.clear.frame(height: 100) // Espace pour le bouton flottant et tab bar
             }
             .padding(.horizontal, 12)
+            .padding(.top, 12)
         }
+        .scrollContentBackground(.hidden)
     }
 }
 
@@ -104,51 +105,34 @@ struct FeedHeaderView: View {
     var onCreatePost: () -> Void
 
     var body: some View {
-        VStack(spacing: 16) {
+        // Zone "What's on your mind"
+        Button(action: onCreatePost) {
+            HStack(spacing: 12) {
+                Circle()
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(width: 42, height: 42)
+                    .overlay(
+                        Image(systemName: "person.fill")
+                            .foregroundColor(TextSecondary)
+                    )
 
-            // Titre simplifié
-            HStack {
-                Text("Feed")
-                    .font(.system(size: 26, weight: .bold))
-                    .foregroundColor(TextPrimary)
+                Text("What's on your mind?")
+                    .foregroundColor(TextSecondary)
+                    .font(.system(size: 15))
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                Spacer()
-
-                Image(systemName: "line.horizontal.3.decrease.circle")
-                    .foregroundColor(GreenAccent)
-                    .font(.system(size: 26))
+                Circle()
+                    .fill(GreenAccent.opacity(0.20))
+                    .frame(width: 36, height: 36)
+                    .overlay(
+                        Image(systemName: "photo")
+                            .foregroundColor(GreenAccent)
+                    )
             }
-            .padding(.horizontal, 4)
-
-            // Zone "What's on your mind"
-            Button(action: onCreatePost) {
-                HStack(spacing: 12) {
-                    Circle()
-                        .fill(Color.gray.opacity(0.3))
-                        .frame(width: 42, height: 42)
-                        .overlay(
-                            Image(systemName: "person.fill")
-                                .foregroundColor(TextSecondary)
-                        )
-
-                    Text("What's on your mind?")
-                        .foregroundColor(TextSecondary)
-                        .font(.system(size: 15))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    Circle()
-                        .fill(GreenAccent.opacity(0.20))
-                        .frame(width: 36, height: 36)
-                        .overlay(
-                            Image(systemName: "photo")
-                                .foregroundColor(GreenAccent)
-                        )
-                }
-                .padding(14)
-                .background(CardBackground.opacity(0.9))
-                .clipShape(RoundedRectangle(cornerRadius: 18))
-                .shadow(color: .black.opacity(0.3), radius: 6, x: 0, y: 4)
-            }
+            .padding(14)
+            .background(CardBackground.opacity(0.9))
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .shadow(color: .black.opacity(0.3), radius: 6, x: 0, y: 4)
         }
     }
 }
@@ -218,19 +202,27 @@ struct PostCardView: View {
             // IMAGE
             if publication.hasImage(),
                let urlString = publication.image,
+               !urlString.isEmpty,
                let url = URL(string: urlString) {
 
-                AsyncImage(url: url) { image in
+                CachedAsyncImage(url: url) { image in
                     image
                         .resizable()
                         .scaledToFill()
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 220)
+                        .clipped()
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
                 } placeholder: {
-                    Color.gray.opacity(0.2)
+                    ZStack {
+                        Color.gray.opacity(0.2)
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: GreenAccent))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 220)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
                 }
-                .frame(maxWidth: .infinity)
-                .frame(height: 220)
-                .clipped()
-                .clipShape(RoundedRectangle(cornerRadius: 16))
             }
 
             // TAGS
@@ -320,26 +312,35 @@ struct PostCardView: View {
                 .frame(width: 48, height: 48)
 
             if let avatarUrl = publication.author?.avatar,
+               !avatarUrl.isEmpty,
                let url = URL(string: avatarUrl) {
 
-                AsyncImage(url: url) { image in
-                    image.resizable().scaledToFill()
+                CachedAsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 44, height: 44)
+                        .clipShape(Circle())
                 } placeholder: {
-                    Color.gray.opacity(0.3)
+                    ProgressView()
+                        .frame(width: 44, height: 44)
                 }
-                .clipShape(Circle())
-                .frame(width: 48, height: 48)
 
             } else {
-                Circle()
-                    .fill(Color(red: 0x37/255, green: 0x41/255, blue: 0x51/255))
-                    .overlay(
-                        Text(initials)
-                            .foregroundColor(GreenAccent)
-                            .font(.system(size: 16, weight: .bold))
-                    )
+                defaultAvatarView
             }
         }
+    }
+    
+    private var defaultAvatarView: some View {
+        Circle()
+            .fill(Color(red: 0x37/255, green: 0x41/255, blue: 0x51/255))
+            .frame(width: 44, height: 44)
+            .overlay(
+                Text(initials)
+                    .foregroundColor(GreenAccent)
+                    .font(.system(size: 16, weight: .bold))
+            )
     }
 
     private var initials: String {

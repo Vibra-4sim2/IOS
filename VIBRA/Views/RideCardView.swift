@@ -9,15 +9,65 @@ import SwiftUI
 
 struct RideCardView: View {
     let item: RideWithCreator
+    var showSaveButton: Bool = true
+    
+    @State private var isSaved: Bool = false
 
     var body: some View {
-        cardContent
-            .frame(height: 240)
-            .background(Color.black.opacity(0.3))
-            .cornerRadius(20)
-            .overlay(cardBorder)
-            .shadow(color: Color.black.opacity(0.4), radius: 12, x: 0, y: 6)
-            .shadow(color: Color.green.opacity(0.1), radius: 8, x: 0, y: 4)
+        ZStack(alignment: .topTrailing) {
+            cardContent
+                .frame(height: 240)
+                .background(Color.black.opacity(0.3))
+                .cornerRadius(20)
+                .overlay(cardBorder)
+                .shadow(color: Color.black.opacity(0.4), radius: 12, x: 0, y: 6)
+                .shadow(color: Color.green.opacity(0.1), radius: 8, x: 0, y: 4)
+            
+            // Save Button
+            if showSaveButton {
+                saveButton
+                    .padding(12)
+            }
+        }
+        .onAppear {
+            isSaved = SavedRidesManager.shared.isRideSaved(item.ride.id)
+        }
+    }
+    
+    // MARK: - Save Button
+    
+    private var saveButton: some View {
+        Button {
+            toggleSave()
+        } label: {
+            Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(isSaved ? AppColors.GreenAccent : .white)
+                .padding(10)
+                .background(AppColors.CardDark.opacity(0.85))
+                .clipShape(Circle())
+                .overlay(
+                    Circle()
+                        .stroke(isSaved ? AppColors.GreenAccent.opacity(0.5) : Color.white.opacity(0.2), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.4), radius: 4, x: 0, y: 2)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    private func toggleSave() {
+        if isSaved {
+            if let rideId = item.ride.id {
+                SavedRidesManager.shared.removeSavedRide(rideId)
+            }
+        } else {
+            SavedRidesManager.shared.saveRide(item.ride, creator: item.creator)
+        }
+        isSaved.toggle()
+        
+        // Haptic feedback
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
     }
     
     // MARK: - Main Card Content
